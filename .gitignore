@@ -5,3 +5,12 @@ node_modules/
 /playwright-report/
 /blob-report/
 /playwright/.cache/
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.env
+.venv
+venv/
+*.log
