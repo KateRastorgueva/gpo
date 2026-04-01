@@ -1,8 +1,9 @@
 import uuid
 from datetime import datetime, timezone
+from typing import Any, Literal
 
 from pydantic import EmailStr
-from sqlalchemy import DateTime
+from sqlalchemy import JSON, DateTime
 from sqlmodel import Field, Relationship, SQLModel
 
 
@@ -127,3 +128,227 @@ class TokenPayload(SQLModel):
 class NewPassword(SQLModel):
     token: str
     new_password: str = Field(min_length=8, max_length=128)
+
+
+# Support system models
+class FaqEntryBase(SQLModel):
+    question: str = Field(min_length=1, max_length=500)
+    answer: str = Field(min_length=1, max_length=4000)
+    is_active: bool = True
+
+
+class FaqEntryCreate(FaqEntryBase):
+    pass
+
+
+class FaqEntryUpdate(SQLModel):
+    question: str | None = Field(default=None, min_length=1, max_length=500)
+    answer: str | None = Field(default=None, min_length=1, max_length=4000)
+    is_active: bool | None = None
+
+
+class FaqEntry(FaqEntryBase, table=True):
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    normalized_question: str = Field(index=True, max_length=500)
+    created_at: datetime | None = Field(
+        default_factory=get_datetime_utc, sa_type=DateTime(timezone=True)  # type: ignore
+    )
+    updated_at: datetime | None = Field(
+        default_factory=get_datetime_utc, sa_type=DateTime(timezone=True)  # type: ignore
+    )
+
+
+class FaqEntryPublic(FaqEntryBase):
+    id: uuid.UUID
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+
+class FaqEntriesPublic(SQLModel):
+    data: list[FaqEntryPublic]
+    count: int
+
+
+class KnowledgeSourceBase(SQLModel):
+    title: str = Field(min_length=1, max_length=255)
+    source_type: str = Field(min_length=1, max_length=20)
+    source_ref: str | None = Field(default=None, max_length=1024)
+    is_active: bool = True
+
+
+class KnowledgeSourceCreate(KnowledgeSourceBase):
+    content: str = Field(min_length=1)
+
+
+class KnowledgeSource(KnowledgeSourceBase, table=True):
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    content: str = Field(min_length=1)
+    status: str = Field(default="pending", min_length=1, max_length=20)
+    last_indexed_at: datetime | None = Field(
+        default=None, sa_type=DateTime(timezone=True)  # type: ignore
+    )
+    created_at: datetime | None = Field(
+        default_factory=get_datetime_utc, sa_type=DateTime(timezone=True)  # type: ignore
+    )
+    updated_at: datetime | None = Field(
+        default_factory=get_datetime_utc, sa_type=DateTime(timezone=True)  # type: ignore
+    )
+    chunks: list["KnowledgeChunk"] = Relationship(
+        back_populates="source", cascade_delete=True
+    )
+
+
+class KnowledgeSourcePublic(KnowledgeSourceBase):
+    id: uuid.UUID
+    status: str
+    last_indexed_at: datetime | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+
+class KnowledgeSourcesPublic(SQLModel):
+    data: list[KnowledgeSourcePublic]
+    count: int
+
+
+class KnowledgeChunk(SQLModel, table=True):
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    source_id: uuid.UUID = Field(
+        foreign_key="knowledgesource.id", nullable=False, ondelete="CASCADE", index=True
+    )
+    chunk_index: int = Field(ge=0, index=True)
+    content: str = Field(min_length=1)
+    vector_id: str = Field(index=True, max_length=64, unique=True)
+    created_at: datetime | None = Field(
+        default_factory=get_datetime_utc, sa_type=DateTime(timezone=True)  # type: ignore
+    )
+    source: KnowledgeSource | None = Relationship(back_populates="chunks")
+
+
+class SupportAskRequest(SQLModel):
+    question: str = Field(min_length=1, max_length=4000)
+    session_id: str | None = Field(default=None, max_length=255)
+    channel: Literal["web"] = "web"
+
+
+class SourceAttribution(SQLModel):
+    source_id: uuid.UUID
+    source_title: str
+    source_ref: str | None = None
+    chunk_id: uuid.UUID | None = None
+    snippet: str | None = None
+    score: float | None = None
+
+
+class SupportRequest(SQLModel, table=True):
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    user_id: uuid.UUID | None = Field(
+        default=None, foreign_key="user.id", nullable=True, index=True
+    )
+    session_id: str = Field(index=True, max_length=255)
+    channel: str = Field(default="web", min_length=1, max_length=20)
+    question: str = Field(min_length=1, max_length=4000)
+    mode: str = Field(default="operator", min_length=1, max_length=20)
+    confidence: float = Field(default=0.0, ge=0.0, le=1.0)
+    fallback_used: bool = False
+    escalated: bool = False
+    status: str = Field(default="completed", min_length=1, max_length=20)
+    created_at: datetime | None = Field(
+        default_factory=get_datetime_utc, sa_type=DateTime(timezone=True)  # type: ignore
+    )
+    answer: "SupportAnswer" = Relationship(
+        back_populates="request", cascade_delete=True
+    )
+    queue_item: "OperatorQueue" = Relationship(
+        back_populates="request", cascade_delete=True
+    )
+
+
+class SupportAnswer(SQLModel, table=True):
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    request_id: uuid.UUID = Field(
+        foreign_key="supportrequest.id",
+        nullable=False,
+        unique=True,
+        ondelete="CASCADE",
+        index=True,
+    )
+    answer: str = Field(min_length=1, max_length=8000)
+    sources_json: list[dict[str, Any]] = Field(
+        default_factory=list, sa_type=JSON  # type: ignore
+    )
+    created_at: datetime | None = Field(
+        default_factory=get_datetime_utc, sa_type=DateTime(timezone=True)  # type: ignore
+    )
+    request: "SupportRequest" = Relationship(back_populates="answer")
+
+
+class OperatorQueue(SQLModel, table=True):
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    request_id: uuid.UUID = Field(
+        foreign_key="supportrequest.id",
+        nullable=False,
+        unique=True,
+        ondelete="CASCADE",
+        index=True,
+    )
+    reason: str = Field(min_length=1, max_length=500)
+    status: str = Field(default="open", min_length=1, max_length=20)
+    created_at: datetime | None = Field(
+        default_factory=get_datetime_utc, sa_type=DateTime(timezone=True)  # type: ignore
+    )
+    updated_at: datetime | None = Field(
+        default_factory=get_datetime_utc, sa_type=DateTime(timezone=True)  # type: ignore
+    )
+    request: "SupportRequest" = Relationship(back_populates="queue_item")
+
+
+class SupportAskResponse(SQLModel):
+    request_id: uuid.UUID
+    session_id: str
+    mode: Literal["faq", "rag", "operator"]
+    answer: str
+    sources: list[SourceAttribution] = Field(default_factory=list)
+    confidence: float = Field(ge=0.0, le=1.0)
+    escalated: bool
+    fallback_used: bool
+
+
+class SupportHistoryEntry(SQLModel):
+    request_id: uuid.UUID
+    question: str
+    mode: Literal["faq", "rag", "operator"]
+    answer: str
+    sources: list[SourceAttribution] = Field(default_factory=list)
+    confidence: float = Field(ge=0.0, le=1.0)
+    escalated: bool
+    fallback_used: bool
+    created_at: datetime | None = None
+
+
+class SupportHistoryPublic(SQLModel):
+    data: list[SupportHistoryEntry]
+    count: int
+
+
+class ReindexRequest(SQLModel):
+    source_ids: list[uuid.UUID] | None = None
+
+
+class ReindexResponse(SQLModel):
+    message: str
+    reindexed_sources: int
+
+
+class OperatorQueueEntry(SQLModel):
+    queue_id: uuid.UUID
+    request_id: uuid.UUID
+    reason: str
+    status: str
+    question: str
+    created_at: datetime | None = None
+
+
+class OperatorQueuePublic(SQLModel):
+    data: list[OperatorQueueEntry]
+    count: int

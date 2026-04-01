@@ -157,3 +157,18 @@ test("Sign up with missing password", async ({ page }) => {
 
   await expect(page.getByText("Password is required")).toBeVisible()
 })
+
+test("Allows opening /signup with invalid token and clears stale auth", async ({
+  page,
+}) => {
+  await page.goto("/signup")
+  await page.evaluate(() => {
+    localStorage.setItem("access_token", "invalid_token")
+  })
+
+  await page.goto("/signup")
+
+  await expect(page).toHaveURL("/signup")
+  await expect(page.getByRole("button", { name: "Sign Up" })).toBeVisible()
+  await expect(page.evaluate(() => localStorage.getItem("access_token"))).resolves.toBeNull()
+})
