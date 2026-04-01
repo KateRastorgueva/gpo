@@ -1,41 +1,27 @@
 # Техподдержка Университета — Web MVP
 
-Рабочий web-проект техподдержки университета с маршрутизацией запросов `FAQ -> RAG -> Operator`.
+Актуально на: 2026-04-02
 
-Текущий фокус релиза: только веб. Telegram-бот временно исключен из релизного контура.
+Проект реализует web-версию техподдержки с маршрутизацией запроса:
+`FAQ -> RAG -> Operator`.
 
-## Что это и цель версии
+Текущий фокус: только web. Telegram-бот исключен из ближайшего релиза.
 
-Система принимает вопрос пользователя, определяет режим обработки и возвращает:
+## 1. Что уже есть
 
-- `mode=faq` — шаблонный ответ из FAQ.
-- `mode=rag` — ответ по базе знаний с источниками.
-- `mode=operator` — эскалация в очередь оператора.
-
-Цель v0.1-draft: стабильный рабочий MVP в UI и API, где видны режим ответа, confidence и источники.
-
-## Что уже реализовано
-
-- Backend pipeline: `FAQ -> RAG -> Operator` с порогами маршрутизации.
-- API поддержки:
-- `POST /api/v1/support/ask`
-- `GET /api/v1/support/history`
-- API админки поддержки:
-- `GET/POST/PATCH/DELETE /api/v1/admin/faq`
-- `GET/POST/DELETE /api/v1/admin/sources`
-- `POST /api/v1/admin/sources/reindex`
-- `GET /api/v1/admin/operator-queue`
+- Backend pipeline с режимами `faq`, `rag`, `operator`.
 - UI пользователя: `/support`.
 - UI админа: `/admin-support`.
-- Retrieval: Qdrant.
+- FAQ CRUD, загрузка источников, reindex, очередь оператора.
+- Векторный поиск через Qdrant.
 - LLM orchestration:
 - primary: Google AI Studio (`gemini-flash-latest`)
 - fallback: Ollama (`llama3.1:8b`)
 
-## Быстрый запуск (локально)
+## 2. Быстрый запуск
 
-1. Проверьте, что заполнен `.env` (минимум: БД, superuser, `GOOGLE_API_KEY`).
-2. Поднимите стек:
+1. Заполните `.env` (минимум: БД, superuser, `GOOGLE_API_KEY`).
+2. Поднимите проект:
 
 ```bash
 docker compose up -d
@@ -43,107 +29,82 @@ docker compose up -d
 
 3. Откройте:
 - UI: <http://localhost:5173>
+- Support: <http://localhost:5173/support>
+- Admin Support: <http://localhost:5173/admin-support>
 - API docs: <http://localhost:8000/docs>
-- Support UI: <http://localhost:5173/support>
-- Admin Support UI: <http://localhost:5173/admin-support>
 
-## Загрузка стартовых данных (TUSUR seed)
-
-Импорт источников и FAQ из seed-файла:
+## 3. Загрузка стартовых данных
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts/import-tusur-sources.ps1
 ```
 
-- seed: `scripts/tusur_sources_seed_v1.json`
-- скрипт выполняет загрузку источников, импорт FAQ и reindex (если не отключено флагами).
+- Seed-файл: `scripts/tusur_sources_seed_v1.json`
+- Скрипт импортирует источники, FAQ и запускает reindex (если не отключать флагами).
 
-## Как быстро проверить 3 режима
+## 4. Как проверить логику FAQ / RAG / Operator
 
-В UI (`/support`):
+В UI `/support`:
 
-1. FAQ-кейс: задайте типовой вопрос из FAQ (или близкую формулировку) и проверьте `mode=faq`.
-2. RAG-кейс: задайте вопрос по контенту загруженных источников и проверьте `mode=rag` + `sources`.
-3. Operator-кейс: задайте редкий/критичный вопрос без достаточного основания и проверьте `mode=operator`.
+1. FAQ-кейс: типовой вопрос из FAQ или близкий перефраз, ожидается `mode=faq`.
+2. RAG-кейс: вопрос по загруженным источникам, ожидается `mode=rag` и `sources`.
+3. Operator-кейс: редкий/критичный вопрос без достаточного основания, ожидается `mode=operator`.
 
-Через API:
+В API `POST /api/v1/support/ask` проверяйте поля:
+`mode`, `confidence`, `sources`, `escalated`, `fallback_used`.
 
-```json
-POST /api/v1/support/ask
-{
-  "question": "Где посмотреть расписание занятий?",
-  "session_id": "demo-session-1",
-  "channel": "web"
-}
-```
+## 5. Тесты
 
-Проверьте поля ответа: `mode`, `confidence`, `sources`, `escalated`, `fallback_used`.
+- Backend support: `backend/tests/api/routes/test_support.py`
+- Frontend e2e: `frontend/tests/*.spec.ts`
 
-## Тесты
-
-Где находятся:
-
-- backend: `backend/tests/api/routes/test_support.py`
-- frontend e2e: `frontend/tests/*.spec.ts`
-
-Как запускать:
+Запуск:
 
 ```bash
 docker compose exec backend bash scripts/tests-start.sh
 ```
 
-Точечно backend support:
+Точечно backend:
 
 ```bash
 docker compose exec backend pytest tests/api/routes/test_support.py
 ```
 
-Frontend e2e (из корня):
+Frontend e2e:
 
 ```bash
 bun run test
 ```
 
-## Архитектура (кратко)
+## 6. Краткая архитектура
 
-- Frontend: React + Vite (`frontend/`).
-- Backend: FastAPI + SQLModel (`backend/`).
-- DB: PostgreSQL.
-- Vector DB: Qdrant.
-- Ingestion/Indexing: загрузка источников, чанкинг, embeddings, индексация.
-- LLM слой: Google API как основной, Ollama как fallback.
+- Frontend: React + Vite (`frontend/`)
+- Backend: FastAPI + SQLModel (`backend/`)
+- DB: PostgreSQL
+- Vector DB: Qdrant
+- RAG: ingestion/chunking/embedding/retrieval
+- LLM: Google API + fallback Ollama
 
-## Ограничения текущей версии
+## 7. Ограничения текущей версии
 
-- Релизный контур: только web (Telegram отключен по продуктному решению).
-- Очередь оператора реализована, но нет полного UI-цикла «оператор ответил пользователю».
-- Качество ответов RAG сильно зависит от полноты и актуальности загруженных источников.
+- Telegram не входит в релизный контур.
+- Нет полного UI-цикла «оператор ответил пользователю».
+- Качество RAG зависит от полноты и актуальности источников.
 
-## SKILLS/MCP (кратко)
+## 8. Документы проекта
 
-- Для UI-проверок и регрессии: skill `playwright`.
-- Для задач по PDF/ТЗ: skill `pdf`.
-- Для задач именно по OpenAI-продуктам: skill `openai-docs`.
-- MCP GitHub: для PR/комментариев/ревью.
-- Локальная диагностика и запуск — через shell-команды в репозитории.
+- [CURRENT_VERSION.md](CURRENT_VERSION.md) — зафиксированное текущее состояние.
+- [TD.md](TD.md) — техническая документация и gap-анализ.
+- [LINKS.md](LINKS.md) — рабочие URL и endpoint-ы.
+- [AGENT_HANDOFF.md](AGENT_HANDOFF.md) — файл для следующей сессии агента.
+- [TUSUR_TYPICAL_QUESTIONS.md](TUSUR_TYPICAL_QUESTIONS.md) — типовые вопросы для FAQ/RAG.
+- [development.md](development.md), [deployment.md](deployment.md), [SECURITY.md](SECURITY.md), [release-notes.md](release-notes.md).
+- [ТЗ_Техподдержка_университета.docx](ТЗ_Техподдержка_университета.docx).
 
-Подробный operational playbook для следующей сессии в файле `AGENT_HANDOFF.md`.
+## 9. SKILLS / MCP (коротко)
 
-## Документация и ссылки
-
-- [TD.md](TD.md)
-- [CURRENT_VERSION.md](CURRENT_VERSION.md)
-- [LINKS.md](LINKS.md)
-- [TUSUR_TYPICAL_QUESTIONS.md](TUSUR_TYPICAL_QUESTIONS.md)
-- [development.md](development.md)
-- [deployment.md](deployment.md)
-- [SECURITY.md](SECURITY.md)
-- [release-notes.md](release-notes.md)
-- [ТЗ_Техподдержка_университета.docx](ТЗ_Техподдержка_университета.docx)
-
-## Что добавить далее
-
-- Troubleshooting-гайд по типовым проблемам (`env`, stale token, reindex, пустой FAQ).
-- Env-матрицу (какие переменные обязательны, какие опциональны, значения по умолчанию).
-- Runbook инцидентов (Google API недоступен, Qdrant недоступен, деградация retrieval).
-- Release checklist (pre-release smoke, regression, миграции, rollback-план).
+- `playwright`: UI smoke/regression.
+- `pdf`: задачи по PDF/ТЗ.
+- `openai-docs`: только когда вопрос про OpenAI-платформу.
+- MCP GitHub: PR/ревью/комментарии.
+- Локальная проверка и диагностика проекта: через shell.

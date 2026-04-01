@@ -1,65 +1,65 @@
 # Ссылки проекта (Web MVP)
 
-Обновлено: 2026-04-02
+Актуально на: 2026-04-02
 
-Ниже собраны рабочие ссылки для запуска, проверки и демо.  
-Список ориентирован на текущий web-релиз (без Telegram).
+## 1. Web UI
 
-## 1) Веб-интерфейс (пользователь)
+- Главная: <http://localhost:5173/>
+- Логин: <http://localhost:5173/login>
+- Регистрация: <http://localhost:5173/signup>
+- Восстановление пароля: <http://localhost:5173/recover-password>
+- Поддержка: <http://localhost:5173/support>
+- Админка: <http://localhost:5173/admin>
+- Админка поддержки: <http://localhost:5173/admin-support>
 
-- http://localhost:5173/
-- http://localhost:5173/login
-- http://localhost:5173/signup
-- http://localhost:5173/recover-password
-- http://localhost:5173/support
+## 2. Backend и API
 
-## 2) Веб-интерфейс (админ)
+- Swagger: <http://localhost:8000/docs>
+- ReDoc: <http://localhost:8000/redoc>
+- OpenAPI JSON: <http://localhost:8000/api/v1/openapi.json>
+- Health-check: <http://localhost:8000/api/v1/utils/health-check/>
 
-- http://localhost:5173/admin
-- http://localhost:5173/admin-support
+Ключевые endpoint-ы поддержки:
 
-## 3) Backend и API
+- `POST /api/v1/support/ask`
+- `GET /api/v1/support/history`
+- `GET/POST/PATCH/DELETE /api/v1/admin/faq`
+- `GET/POST/DELETE /api/v1/admin/sources`
+- `POST /api/v1/admin/sources/reindex`
+- `GET /api/v1/admin/operator-queue`
 
-- http://localhost:8000/docs
-- http://localhost:8000/redoc
-- http://localhost:8000/api/v1/openapi.json
-- http://localhost:8000/api/v1/utils/health-check/
+## 3. Локальные сервисы Docker
 
-Поддержка (основные endpoints):
+- Qdrant API: <http://localhost:6333>
+- MailCatcher UI: <http://localhost:1080>
+- Adminer: <http://localhost:8080>
+- Traefik (local): <http://localhost:8090>
 
-- `POST` http://localhost:8000/api/v1/support/ask
-- `GET` http://localhost:8000/api/v1/support/history
-- `GET` http://localhost:8000/api/v1/admin/faq
-- `POST` http://localhost:8000/api/v1/admin/faq
-- `PATCH` http://localhost:8000/api/v1/admin/faq/{faq_id}
-- `DELETE` http://localhost:8000/api/v1/admin/faq/{faq_id}
-- `GET` http://localhost:8000/api/v1/admin/sources
-- `POST` http://localhost:8000/api/v1/admin/sources/upload
-- `DELETE` http://localhost:8000/api/v1/admin/sources/{source_id}
-- `POST` http://localhost:8000/api/v1/admin/sources/reindex
-- `GET` http://localhost:8000/api/v1/admin/operator-queue
+## 4. Внешние LLM/Embeddings endpoint-ы
 
-## 4) Локальные сервисы Docker
+- Google generation:  
+  <https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent>
+- Google embeddings:  
+  <https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:embedContent>
+- Ollama fallback:  
+  <http://localhost:11434/api/generate>
 
-- http://localhost:6333 (Qdrant API)
-- http://localhost:1080 (MailCatcher UI)
-- http://localhost:8080 (Adminer)
+## 5. Seed-источники TUSUR
 
-## 5) LLM/Embeddings провайдеры
+- <https://tusur.ru/ru>
+- <https://tusur.ru/ru/studentam>
+- <https://abiturient.tusur.ru/ru>
+- <https://abiturient.tusur.ru/ru/kontakty>
+- <https://timetable.tusur.ru/>
+- <https://tusur.ru/sveden/common>
+- <https://tusur.ru/sveden/education>
+- <https://tusur.ru/sveden/grants>
+- <https://tusur.ru/sveden/paid_edu>
 
-- https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent
-- https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:embedContent
-- http://localhost:11434/api/generate (Ollama fallback)
+## 6. Внутренние документы
 
-## 6) Источники знаний TUSUR (RAG seed)
-
-- https://tusur.ru/ru
-- https://tusur.ru/ru/studentam
-- https://abiturient.tusur.ru/ru
-- https://abiturient.tusur.ru/ru/kontakty
-- https://timetable.tusur.ru/
-- https://tusur.ru/sveden/common
-- https://tusur.ru/sveden/education
-- https://tusur.ru/sveden/grants
-- https://tusur.ru/sveden/paid_edu
-
+- [README.md](README.md)
+- [CURRENT_VERSION.md](CURRENT_VERSION.md)
+- [TD.md](TD.md)
+- [AGENT_HANDOFF.md](AGENT_HANDOFF.md)
+- [TUSUR_TYPICAL_QUESTIONS.md](TUSUR_TYPICAL_QUESTIONS.md)
