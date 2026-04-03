@@ -9,6 +9,8 @@
 
 Start the local development environment with Docker Compose following the guide in [../development.md](../development.md).
 
+If you are new to this project backend, start with the beginner path in [../docs/getting-started-backend.md](../docs/getting-started-backend.md).
+
 ## General Workflow
 
 By default, the dependencies are managed with [uv](https://docs.astral.sh/uv/), go there and install it.

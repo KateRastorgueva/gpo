@@ -2,7 +2,13 @@
 
 ## Docker Compose
 
-* Start the local stack with Docker Compose:
+* Beginner-friendly canonical start:
+
+```bash
+docker compose up -d
+```
+
+* Optional live-reload flow during active development:
 
 ```bash
 docker compose watch

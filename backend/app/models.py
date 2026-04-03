@@ -180,6 +180,12 @@ class KnowledgeSourceCreate(KnowledgeSourceBase):
     content: str = Field(min_length=1)
 
 
+class KnowledgeSourceUploadRequest(SQLModel):
+    title: str | None = Field(default=None, max_length=255)
+    source_url: str | None = Field(default=None, max_length=2048)
+    manual_content: str | None = None
+
+
 class KnowledgeSource(KnowledgeSourceBase, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     content: str = Field(min_length=1)
@@ -238,6 +244,14 @@ class SourceAttribution(SQLModel):
     chunk_id: uuid.UUID | None = None
     snippet: str | None = None
     score: float | None = None
+
+
+class DecisionMetrics(SQLModel):
+    top_score: float = Field(default=0.0, ge=0.0, le=1.0)
+    relevant_chunks: int = Field(default=0, ge=0)
+    faq_score: float = Field(default=0.0, ge=0.0, le=1.0)
+    conflict: bool = False
+    critical: bool = False
 
 
 class SupportRequest(SQLModel, table=True):
@@ -312,6 +326,8 @@ class SupportAskResponse(SQLModel):
     confidence: float = Field(ge=0.0, le=1.0)
     escalated: bool
     fallback_used: bool
+    route_reason: str = Field(min_length=1, max_length=100)
+    decision_metrics: DecisionMetrics
 
 
 class SupportHistoryEntry(SQLModel):
@@ -333,11 +349,24 @@ class SupportHistoryPublic(SQLModel):
 
 class ReindexRequest(SQLModel):
     source_ids: list[uuid.UUID] | None = None
+    full_rebuild: bool = False
+    purge_orphans: bool = True
 
 
 class ReindexResponse(SQLModel):
     message: str
     reindexed_sources: int
+    orphan_vectors_removed: int = Field(default=0, ge=0)
+    full_rebuild: bool = False
+
+
+class SupportMetricsPublic(SQLModel):
+    total_requests: int = Field(default=0, ge=0)
+    faq_share: float = Field(default=0.0, ge=0.0, le=1.0)
+    rag_share: float = Field(default=0.0, ge=0.0, le=1.0)
+    operator_share: float = Field(default=0.0, ge=0.0, le=1.0)
+    average_confidence: float = Field(default=0.0, ge=0.0, le=1.0)
+    empty_sources_share: float = Field(default=0.0, ge=0.0, le=1.0)
 
 
 class OperatorQueueEntry(SQLModel):

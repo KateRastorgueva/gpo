@@ -34,6 +34,20 @@ const modeLabel = (mode: string) => {
   return "Operator escalation"
 }
 
+const routeReasonLabel = (reason: string) => {
+  const labels: Record<string, string> = {
+    faq_hit: "Найдено совпадение в FAQ",
+    rag_answer: "Ответ сформирован по источникам",
+    insufficient_context: "Недостаточно контекста в базе знаний",
+    conflict: "Конфликт релевантных источников",
+    retrieval_failure: "Поиск по знаниям недоступен",
+    critical_low_confidence: "Критичный вопрос при низкой уверенности",
+    llm_failure: "Ошибка генерации ответа",
+    empty_answer: "Пустой ответ модели",
+  }
+  return labels[reason] || reason
+}
+
 export const Route = createFileRoute("/_layout/support")({
   component: SupportPage,
   head: () => ({
@@ -114,10 +128,21 @@ function SupportPage() {
             <p className="text-xs text-muted-foreground">
               Answer type: {modeLabel(latestResponse.mode)}
             </p>
+            <p className="text-xs text-muted-foreground">
+              Причина маршрута: {routeReasonLabel(latestResponse.route_reason)}
+            </p>
             <p className="text-sm whitespace-pre-wrap">{latestResponse.answer}</p>
             <p className="text-xs text-muted-foreground">
               confidence: {latestResponse.confidence.toFixed(2)} | fallback:{" "}
               {latestResponse.fallback_used ? "ollama" : "google"}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              decision: top_score=
+              {latestResponse.decision_metrics.top_score.toFixed(2)}, relevant_chunks=
+              {latestResponse.decision_metrics.relevant_chunks}, faq_score=
+              {latestResponse.decision_metrics.faq_score.toFixed(2)}, conflict=
+              {String(latestResponse.decision_metrics.conflict)}, critical=
+              {String(latestResponse.decision_metrics.critical)}
             </p>
             <SourceList sources={latestResponse.sources} />
           </CardContent>

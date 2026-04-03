@@ -25,8 +25,10 @@
 - `GET /api/v1/support/history`
 - `GET/POST/PATCH/DELETE /api/v1/admin/faq`
 - `GET/POST/DELETE /api/v1/admin/sources`
+- `POST /api/v1/admin/sources/upload-json`
 - `POST /api/v1/admin/sources/reindex`
 - `GET /api/v1/admin/operator-queue`
+- `GET /api/v1/admin/metrics`
 
 ## 3. Локальные сервисы Docker
 

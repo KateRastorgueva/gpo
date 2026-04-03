@@ -33,18 +33,19 @@ function Upload-Source {
         [hashtable]$Headers,
         [pscustomobject]$Entry
     )
-    $form = @{
+    $payload = @{
         title = [string]$Entry.title
         source_url = [string]$Entry.source_url
         manual_content = [string]$Entry.manual_content
-    }
+    } | ConvertTo-Json -Depth 5
+    $payloadBytes = [System.Text.Encoding]::UTF8.GetBytes($payload)
 
     return Invoke-RestMethod `
         -Method Post `
-        -Uri "$BaseUrl/api/v1/admin/sources/upload" `
+        -Uri "$BaseUrl/api/v1/admin/sources/upload-json" `
         -Headers $Headers `
-        -Body $form `
-        -ContentType "application/x-www-form-urlencoded"
+        -Body $payloadBytes `
+        -ContentType "application/json; charset=utf-8"
 }
 
 function Normalize-FaqQuestion {
@@ -90,12 +91,13 @@ function Create-Faq {
         answer = $Answer
         is_active = $true
     } | ConvertTo-Json -Depth 3
+    $payloadBytes = [System.Text.Encoding]::UTF8.GetBytes($payload)
 
     return Invoke-RestMethod `
         -Method Post `
         -Uri "$BaseUrl/api/v1/admin/faq" `
         -Headers $Headers `
-        -Body $payload `
+        -Body $payloadBytes `
         -ContentType "application/json; charset=utf-8"
 }
 

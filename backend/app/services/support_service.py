@@ -13,6 +13,7 @@ from sqlmodel import Session, col, delete, select
 
 from app.core.config import settings
 from app.models import (
+    DecisionMetrics,
     FaqEntry,
     FaqEntryCreate,
     FaqEntryUpdate,
@@ -25,6 +26,7 @@ from app.models import (
     SupportAskRequest,
     SupportAskResponse,
     SupportHistoryEntry,
+    SupportMetricsPublic,
     SupportRequest,
 )
 
@@ -270,6 +272,26 @@ def faq_similarity(left: str, right: str) -> float:
     return round(min(1.0, max(lexical_score, keyword_score)), 4)
 
 
+def _lexical_similarity(left: str, right: str) -> float:
+    left_tokens = _token_set(left)
+    right_tokens = _token_set(right)
+    if not left_tokens or not right_tokens:
+        return 0.0
+    intersection = len(left_tokens.intersection(right_tokens))
+    if intersection == 0:
+        return 0.0
+    precision = intersection / len(right_tokens)
+    recall = intersection / len(left_tokens)
+    return round(
+        (2 * precision * recall) / (precision + recall) if (precision + recall) else 0.0,
+        4,
+    )
+
+
+def _clamp_score(value: float) -> float:
+    return max(0.0, min(1.0, value))
+
+
 def is_critical_question(question: str) -> bool:
     normalized = normalize_text(question)
     return any(keyword in normalized for keyword in CRITICAL_KEYWORDS)
@@ -401,6 +423,76 @@ def ensure_qdrant_collection(vector_size: int) -> None:
     )
 
 
+def reset_qdrant_collection() -> None:
+    collection_path = f"/collections/{settings.QDRANT_COLLECTION_NAME}"
+    _qdrant_request("DELETE", collection_path, allowed_statuses={404})
+
+
+def _scroll_qdrant_points(limit: int = 256) -> list[dict[str, Any]]:
+    collection_path = f"/collections/{settings.QDRANT_COLLECTION_NAME}/points/scroll"
+    points: list[dict[str, Any]] = []
+    offset: Any | None = None
+    while True:
+        payload: dict[str, Any] = {
+            "limit": limit,
+            "with_payload": True,
+            "with_vector": False,
+        }
+        if offset is not None:
+            payload["offset"] = offset
+        response = _qdrant_request(
+            "POST", collection_path, payload=payload, allowed_statuses={404}
+        )
+        if response.status_code == 404:
+            return []
+        result = response.json().get("result") or {}
+        batch = result.get("points") or []
+        points.extend(batch)
+        offset = result.get("next_page_offset")
+        if offset is None:
+            break
+    return points
+
+
+def _delete_qdrant_points(point_ids: list[Any]) -> None:
+    if not point_ids:
+        return
+    _qdrant_request(
+        "POST",
+        f"/collections/{settings.QDRANT_COLLECTION_NAME}/points/delete",
+        payload={"points": point_ids},
+        allowed_statuses={404},
+    )
+
+
+def remove_orphan_vectors(session: Session) -> int:
+    points = _scroll_qdrant_points()
+    if not points:
+        return 0
+
+    valid_source_ids = {
+        str(source_id)
+        for source_id in session.exec(
+            select(KnowledgeSource.id).where(KnowledgeSource.is_active == True)  # noqa: E712
+        ).all()
+    }
+    valid_chunk_ids = {str(chunk_id) for chunk_id in session.exec(select(KnowledgeChunk.id)).all()}
+
+    orphan_ids: list[Any] = []
+    for point in points:
+        payload = point.get("payload") or {}
+        source_id = str(payload.get("source_id") or "")
+        chunk_id = str(payload.get("chunk_id") or "")
+        source_exists = bool(source_id and source_id in valid_source_ids)
+        chunk_exists = bool(chunk_id and chunk_id in valid_chunk_ids)
+        if not source_exists or not chunk_exists:
+            orphan_ids.append(point.get("id"))
+
+    if orphan_ids:
+        _delete_qdrant_points(orphan_ids)
+    return len(orphan_ids)
+
+
 def chunk_text(text: str) -> list[str]:
     stripped = text.strip()
     if not stripped:
@@ -471,7 +563,8 @@ def _serialize_sources(sources: list[SourceAttribution]) -> list[dict[str, Any]]
     return serialized
 
 
-def retrieve_relevant_chunks(question: str) -> list[RetrievalResult]:
+def retrieve_semantic_chunks(question: str, limit: int | None = None) -> list[RetrievalResult]:
+    final_limit = limit or settings.HYBRID_CANDIDATES_LIMIT
     query_vector = embed_text(question)
     ensure_qdrant_collection(len(query_vector))
     response = _qdrant_request(
@@ -479,7 +572,7 @@ def retrieve_relevant_chunks(question: str) -> list[RetrievalResult]:
         f"/collections/{settings.QDRANT_COLLECTION_NAME}/points/search",
         payload={
             "vector": query_vector,
-            "limit": settings.RETRIEVAL_TOP_K,
+            "limit": final_limit,
             "with_payload": True,
         },
         allowed_statuses={404},
@@ -504,6 +597,119 @@ def retrieve_relevant_chunks(question: str) -> list[RetrievalResult]:
             )
         )
     return results
+
+
+def retrieve_lexical_chunks(session: Session, question: str) -> list[RetrievalResult]:
+    statement = (
+        select(KnowledgeChunk, KnowledgeSource)
+        .join(KnowledgeSource, KnowledgeChunk.source_id == KnowledgeSource.id)
+        .where(KnowledgeSource.is_active == True)  # noqa: E712
+    )
+    rows = session.exec(statement).all()
+    question_normalized = normalize_text(question)
+    lexical_results: list[RetrievalResult] = []
+    for chunk, source in rows:
+        chunk_score = _lexical_similarity(question_normalized, chunk.content)
+        title_score = _lexical_similarity(question_normalized, source.title)
+        score = max(chunk_score, title_score)
+        if score <= 0:
+            continue
+        lexical_results.append(
+            RetrievalResult(
+                source_id=source.id,
+                source_title=source.title,
+                source_ref=source.source_ref,
+                chunk_id=chunk.id,
+                snippet=chunk.content,
+                score=score,
+            )
+        )
+    lexical_results.sort(key=lambda item: item.score, reverse=True)
+    return lexical_results[: settings.HYBRID_CANDIDATES_LIMIT]
+
+
+def _result_key(item: RetrievalResult) -> str:
+    if item.chunk_id is not None:
+        return f"chunk:{item.chunk_id}"
+    return f"source:{item.source_id}:{hash(item.snippet)}"
+
+
+def _merge_hybrid_results(
+    semantic_results: list[RetrievalResult],
+    lexical_results: list[RetrievalResult],
+) -> list[RetrievalResult]:
+    semantic_by_key = {_result_key(item): item for item in semantic_results}
+    lexical_by_key = {_result_key(item): item for item in lexical_results}
+    keys = set(semantic_by_key).union(lexical_by_key)
+    if not keys:
+        return []
+
+    merged: list[RetrievalResult] = []
+    for key in keys:
+        semantic_item = semantic_by_key.get(key)
+        lexical_item = lexical_by_key.get(key)
+        base = semantic_item or lexical_item
+        if base is None:
+            continue
+
+        sem_score_raw = semantic_item.score if semantic_item else 0.0
+        lex_score_raw = lexical_item.score if lexical_item else 0.0
+
+        weighted_sum = 0.0
+        active_weight = 0.0
+        if semantic_item is not None:
+            weighted_sum += settings.HYBRID_SEMANTIC_WEIGHT * sem_score_raw
+            active_weight += settings.HYBRID_SEMANTIC_WEIGHT
+        if lexical_item is not None:
+            weighted_sum += settings.HYBRID_LEXICAL_WEIGHT * lex_score_raw
+            active_weight += settings.HYBRID_LEXICAL_WEIGHT
+
+        combined = _clamp_score(weighted_sum / active_weight) if active_weight > 0 else 0.0
+        merged.append(
+            RetrievalResult(
+                source_id=base.source_id,
+                source_title=base.source_title,
+                source_ref=base.source_ref,
+                chunk_id=base.chunk_id,
+                snippet=base.snippet,
+                score=combined,
+            )
+        )
+
+    merged.sort(key=lambda item: item.score, reverse=True)
+    return merged[: settings.HYBRID_CANDIDATES_LIMIT]
+
+
+def rerank_results(question: str, results: list[RetrievalResult]) -> list[RetrievalResult]:
+    if not results:
+        return []
+    normalized_question = normalize_text(question)
+    reranked: list[RetrievalResult] = []
+    for item in results:
+        lexical_score = _lexical_similarity(normalized_question, item.snippet)
+        # Rerank should boost lexical agreement without suppressing strong semantic matches.
+        score = _clamp_score(
+            item.score + (settings.RERANK_WEIGHT * max(0.0, lexical_score - item.score))
+        )
+        reranked.append(
+            RetrievalResult(
+                source_id=item.source_id,
+                source_title=item.source_title,
+                source_ref=item.source_ref,
+                chunk_id=item.chunk_id,
+                snippet=item.snippet,
+                score=score,
+            )
+        )
+    reranked.sort(key=lambda item: item.score, reverse=True)
+    return reranked[: settings.RETRIEVAL_TOP_K]
+
+
+def retrieve_relevant_chunks(*, session: Session, question: str) -> list[RetrievalResult]:
+    semantic = retrieve_semantic_chunks(question)
+    lexical = retrieve_lexical_chunks(session, question)
+    merged = _merge_hybrid_results(semantic, lexical)
+    return rerank_results(question, merged)
 
 
 def has_conflicting_sources(results: list[RetrievalResult]) -> bool:
@@ -599,6 +805,8 @@ def _record_support_result(
     answer_text: str,
     sources: list[SourceAttribution],
     escalation_reason: str | None,
+    route_reason: str,
+    decision_metrics: DecisionMetrics,
 ) -> SupportAskResponse:
     request = SupportRequest(
         user_id=user_id,
@@ -636,6 +844,8 @@ def _record_support_result(
         confidence=confidence,
         escalated=escalated,
         fallback_used=fallback_used,
+        route_reason=route_reason,
+        decision_metrics=decision_metrics,
     )
 
 
@@ -644,6 +854,8 @@ def run_support_pipeline(
 ) -> SupportAskResponse:
     session_id = payload.session_id or str(uuid.uuid4())
     faq_match, faq_score = find_faq_match(session, payload.question)
+    critical = is_critical_question(payload.question)
+
     if faq_match and faq_score >= settings.FAQ_SIMILARITY_THRESHOLD:
         faq_source = SourceAttribution(
             source_id=faq_match.id,
@@ -652,6 +864,13 @@ def run_support_pipeline(
             chunk_id=None,
             snippet=faq_match.question,
             score=faq_score,
+        )
+        decision_metrics = DecisionMetrics(
+            top_score=0.0,
+            relevant_chunks=0,
+            faq_score=_clamp_score(faq_score),
+            conflict=False,
+            critical=critical,
         )
         return _record_support_result(
             session=session,
@@ -665,11 +884,20 @@ def run_support_pipeline(
             answer_text=faq_match.answer,
             sources=[faq_source],
             escalation_reason=None,
+            route_reason="faq_hit",
+            decision_metrics=decision_metrics,
         )
 
     try:
-        retrieved = retrieve_relevant_chunks(payload.question)
+        retrieved = retrieve_relevant_chunks(session=session, question=payload.question)
     except Exception:
+        decision_metrics = DecisionMetrics(
+            top_score=0.0,
+            relevant_chunks=0,
+            faq_score=_clamp_score(faq_score),
+            conflict=False,
+            critical=critical,
+        )
         return _record_support_result(
             session=session,
             user_id=user_id,
@@ -682,8 +910,10 @@ def run_support_pipeline(
             answer_text="Поиск по базе знаний временно недоступен. Обращение передано оператору.",
             sources=[],
             escalation_reason="retrieval-failure",
+            route_reason="retrieval_failure",
+            decision_metrics=decision_metrics,
         )
-    retrieved = sorted(retrieved, key=lambda item: item.score, reverse=True)
+
     top_score = retrieved[0].score if retrieved else 0.0
     relevant_chunk_count = sum(
         1 for item in retrieved if item.score >= settings.RAG_RELEVANT_CHUNK_THRESHOLD
@@ -691,11 +921,18 @@ def run_support_pipeline(
     has_context = (
         relevant_chunk_count >= 2 and top_score >= settings.RAG_TOP_SCORE_THRESHOLD
     )
-    critical = is_critical_question(payload.question)
     conflict = has_conflicting_sources(retrieved)
+    decision_metrics = DecisionMetrics(
+        top_score=_clamp_score(top_score),
+        relevant_chunks=relevant_chunk_count,
+        faq_score=_clamp_score(faq_score),
+        conflict=conflict,
+        critical=critical,
+    )
 
     if not has_context or conflict:
         reason = "conflicting-sources" if conflict else "insufficient-context"
+        route_reason = "conflict" if conflict else "insufficient_context"
         return _record_support_result(
             session=session,
             user_id=user_id,
@@ -708,6 +945,8 @@ def run_support_pipeline(
             answer_text="Автоматический ответ недоступен. Обращение передано оператору.",
             sources=_to_source_attributions(retrieved),
             escalation_reason=reason,
+            route_reason=route_reason,
+            decision_metrics=decision_metrics,
         )
 
     confidence = min(1.0, top_score)
@@ -724,6 +963,8 @@ def run_support_pipeline(
             answer_text="Для этого вопроса требуется проверка оператором. Обращение передано.",
             sources=_to_source_attributions(retrieved),
             escalation_reason="low-confidence-critical",
+            route_reason="critical_low_confidence",
+            decision_metrics=decision_metrics,
         )
 
     try:
@@ -741,6 +982,8 @@ def run_support_pipeline(
             answer_text="Не удалось сформировать надежный ответ автоматически. Обращение передано оператору.",
             sources=_to_source_attributions(retrieved),
             escalation_reason="llm-failure",
+            route_reason="llm_failure",
+            decision_metrics=decision_metrics,
         )
 
     if not answer_text.strip():
@@ -756,6 +999,8 @@ def run_support_pipeline(
             answer_text="Ответ получился пустым. Обращение передано оператору.",
             sources=_to_source_attributions(retrieved),
             escalation_reason="empty-answer",
+            route_reason="empty_answer",
+            decision_metrics=decision_metrics,
         )
 
     if (
@@ -778,6 +1023,8 @@ def run_support_pipeline(
         answer_text=answer_text,
         sources=_to_source_attributions(retrieved),
         escalation_reason=None,
+        route_reason="rag_answer",
+        decision_metrics=decision_metrics,
     )
 
 
@@ -836,11 +1083,13 @@ def list_support_history(
 
 
 def create_faq_entry(session: Session, faq_in: FaqEntryCreate) -> FaqEntry:
+    sanitized_question = _ensure_utf8_text(faq_in.question)
+    sanitized_answer = _ensure_utf8_text(faq_in.answer)
     faq = FaqEntry(
-        question=faq_in.question,
-        answer=faq_in.answer,
+        question=sanitized_question,
+        answer=sanitized_answer,
         is_active=faq_in.is_active,
-        normalized_question=normalize_text(faq_in.question),
+        normalized_question=normalize_text(sanitized_question),
     )
     session.add(faq)
     session.commit()
@@ -850,6 +1099,10 @@ def create_faq_entry(session: Session, faq_in: FaqEntryCreate) -> FaqEntry:
 
 def update_faq_entry(session: Session, faq: FaqEntry, faq_in: FaqEntryUpdate) -> FaqEntry:
     data = faq_in.model_dump(exclude_unset=True)
+    if "question" in data and data["question"]:
+        data["question"] = _ensure_utf8_text(data["question"])
+    if "answer" in data and data["answer"]:
+        data["answer"] = _ensure_utf8_text(data["answer"])
     if "question" in data and data["question"]:
         data["normalized_question"] = normalize_text(data["question"])
     data["updated_at"] = datetime.now(timezone.utc)
@@ -886,7 +1139,7 @@ def _extract_text_from_pdf(data: bytes) -> str:
     text_parts: list[str] = []
     for page in reader.pages:
         text_parts.append(page.extract_text() or "")
-    return "\n".join(text_parts).strip()
+    return _ensure_utf8_text("\n".join(text_parts))
 
 
 def _extract_text_from_url(url: str) -> str:
@@ -903,7 +1156,18 @@ def _extract_text_from_url(url: str) -> str:
     soup = BeautifulSoup(html, "html.parser")
     for tag in soup(["script", "style", "noscript"]):
         tag.decompose()
-    return soup.get_text(separator=" ", strip=True)
+    return _ensure_utf8_text(soup.get_text(separator=" ", strip=True))
+
+
+def _decode_utf8_text_bytes(data: bytes) -> str:
+    try:
+        return data.decode("utf-8-sig")
+    except UnicodeDecodeError as exc:
+        raise ValueError("Text source must be UTF-8 encoded") from exc
+
+
+def _ensure_utf8_text(value: str) -> str:
+    return value.encode("utf-8", errors="replace").decode("utf-8", errors="replace").strip()
 
 
 def resolve_source_content(
@@ -914,19 +1178,19 @@ def resolve_source_content(
     manual_content: str | None,
 ) -> tuple[str, str, str | None]:
     if manual_content and manual_content.strip():
-        return manual_content.strip(), "manual", None
+        return _ensure_utf8_text(manual_content), "manual", None
     if source_url:
         text = _extract_text_from_url(source_url)
-        return text, "url", source_url
+        return text, "url", _ensure_utf8_text(source_url)
     if file_bytes is None or not filename:
         raise ValueError("No source content provided")
     lower_name = filename.lower()
     if lower_name.endswith(".pdf"):
         text = _extract_text_from_pdf(file_bytes)
-        return text, "pdf", filename
+        return text, "pdf", _ensure_utf8_text(filename)
     if lower_name.endswith(".txt") or lower_name.endswith(".md"):
-        text = file_bytes.decode("utf-8", errors="ignore")
-        return text, "txt", filename
+        text = _decode_utf8_text_bytes(file_bytes)
+        return _ensure_utf8_text(text), "txt", _ensure_utf8_text(filename)
     raise ValueError("Unsupported file type. Use pdf/txt/md or URL/manual content.")
 
 
@@ -954,6 +1218,11 @@ def _upsert_points(points: list[dict[str, Any]]) -> None:
 
 
 def index_source(session: Session, source: KnowledgeSource) -> int:
+    source.title = _ensure_utf8_text(source.title)
+    source.content = _ensure_utf8_text(source.content)
+    if source.source_ref:
+        source.source_ref = _ensure_utf8_text(source.source_ref)
+
     chunks = chunk_text(source.content)
     if not chunks:
         raise ValueError("Source content is empty after processing")
@@ -1008,11 +1277,25 @@ def index_source(session: Session, source: KnowledgeSource) -> int:
     return len(new_chunks)
 
 
-def reindex_sources(session: Session, source_ids: list[uuid.UUID] | None = None) -> int:
+def reindex_sources(
+    session: Session,
+    source_ids: list[uuid.UUID] | None = None,
+    *,
+    full_rebuild: bool = False,
+    purge_orphans: bool = True,
+) -> tuple[int, int]:
+    if full_rebuild:
+        source_ids = None
+
     statement = select(KnowledgeSource).where(KnowledgeSource.is_active == True)  # noqa: E712
     if source_ids:
         statement = statement.where(KnowledgeSource.id.in_(source_ids))
     sources = session.exec(statement).all()
+    if full_rebuild:
+        reset_qdrant_collection()
+        session.exec(delete(KnowledgeChunk))
+        session.commit()
+
     count = 0
     for source in sources:
         try:
@@ -1026,7 +1309,8 @@ def reindex_sources(session: Session, source_ids: list[uuid.UUID] | None = None)
                 source_db.updated_at = datetime.now(timezone.utc)
                 session.add(source_db)
                 session.commit()
-    return count
+    orphan_vectors_removed = remove_orphan_vectors(session) if purge_orphans else 0
+    return count, orphan_vectors_removed
 
 
 def list_operator_queue(session: Session) -> list[OperatorQueueEntry]:
@@ -1056,3 +1340,31 @@ def list_operator_queue(session: Session) -> list[OperatorQueueEntry]:
             )
         )
     return response
+
+
+def get_support_metrics(session: Session) -> SupportMetricsPublic:
+    requests = session.exec(select(SupportRequest)).all()
+    total = len(requests)
+    if total == 0:
+        return SupportMetricsPublic()
+
+    faq_count = sum(1 for item in requests if item.mode == "faq")
+    rag_count = sum(1 for item in requests if item.mode == "rag")
+    operator_count = sum(1 for item in requests if item.mode == "operator")
+    average_confidence = sum(item.confidence for item in requests) / total
+
+    answers = session.exec(select(SupportAnswer)).all()
+    answer_count = len(answers)
+    empty_sources_count = sum(
+        1 for answer in answers if not answer.sources_json or len(answer.sources_json) == 0
+    )
+    empty_sources_share = (empty_sources_count / answer_count) if answer_count else 0.0
+
+    return SupportMetricsPublic(
+        total_requests=total,
+        faq_share=_clamp_score(faq_count / total),
+        rag_share=_clamp_score(rag_count / total),
+        operator_share=_clamp_score(operator_count / total),
+        average_confidence=_clamp_score(average_confidence),
+        empty_sources_share=_clamp_score(empty_sources_share),
+    )

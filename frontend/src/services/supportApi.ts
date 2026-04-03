@@ -9,6 +9,14 @@ export type SourceAttribution = {
   score?: number | null
 }
 
+export type DecisionMetrics = {
+  top_score: number
+  relevant_chunks: number
+  faq_score: number
+  conflict: boolean
+  critical: boolean
+}
+
 export type SupportAskResponse = {
   request_id: string
   session_id: string
@@ -18,6 +26,8 @@ export type SupportAskResponse = {
   confidence: number
   escalated: boolean
   fallback_used: boolean
+  route_reason: string
+  decision_metrics: DecisionMetrics
 }
 
 export type SupportHistoryEntry = {
@@ -60,6 +70,15 @@ export type OperatorQueueEntry = {
   status: "open" | "in_progress" | "closed"
   question: string
   created_at?: string | null
+}
+
+export type SupportMetrics = {
+  total_requests: number
+  faq_share: number
+  rag_share: number
+  operator_share: number
+  average_confidence: number
+  empty_sources_share: number
 }
 
 const jsonHeaders = () => ({
@@ -166,13 +185,26 @@ export const uploadKnowledgeSource = (payload: {
   })
 }
 
-export const reindexKnowledgeSources = (sourceIds?: string[]) =>
-  request<{ message: string; reindexed_sources: number }>(
+export const reindexKnowledgeSources = (options?: {
+  sourceIds?: string[]
+  fullRebuild?: boolean
+  purgeOrphans?: boolean
+}) =>
+  request<{
+    message: string
+    reindexed_sources: number
+    orphan_vectors_removed: number
+    full_rebuild: boolean
+  }>(
     "/api/v1/admin/sources/reindex",
     {
       method: "POST",
       headers: jsonHeaders(),
-      body: JSON.stringify({ source_ids: sourceIds }),
+      body: JSON.stringify({
+        source_ids: options?.sourceIds,
+        full_rebuild: options?.fullRebuild ?? false,
+        purge_orphans: options?.purgeOrphans ?? true,
+      }),
     },
   )
 
@@ -184,3 +216,9 @@ export const getOperatorQueue = () =>
       headers: { Authorization: jsonHeaders().Authorization },
     },
   )
+
+export const getSupportMetrics = () =>
+  request<SupportMetrics>("/api/v1/admin/metrics", {
+    method: "GET",
+    headers: { Authorization: jsonHeaders().Authorization },
+  })

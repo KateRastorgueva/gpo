@@ -19,12 +19,16 @@
 - `GET/POST/DELETE /api/v1/admin/sources`
 - `POST /api/v1/admin/sources/reindex`
 - `GET /api/v1/admin/operator-queue`
+- `GET /api/v1/admin/metrics`
 
 Логика маршрутизации:
 
 - `FAQ`: similarity-порог `FAQ_SIMILARITY_THRESHOLD=0.90`.
 - `RAG`: нужен достаточный контекст (`>=2` релевантных чанка и `top_score >= 0.72`).
 - `Operator`: когда оснований недостаточно, при конфликте источников или для критичных вопросов при низкой уверенности.
+- В `support/ask` добавлены объяснимые поля маршрутизации:
+- `route_reason`
+- `decision_metrics` (`top_score`, `relevant_chunks`, `faq_score`, `conflict`, `critical`)
 
 ### RAG / LLM
 
@@ -33,6 +37,7 @@
 - fallback на Google embeddings (`gemini-embedding-001`)
 - резервный hash-embedding
 - Vector storage: Qdrant (`knowledge_chunks`)
+- Поиск: гибридный (семантический + лексический) + повторное ранжирование фрагментов.
 - LLM:
 - primary: Google AI Studio (`gemini-flash-latest`)
 - fallback: Ollama (`llama3.1:8b`)
@@ -42,6 +47,7 @@
 - Пользовательская страница: `/support`.
 - Админская страница: `/admin-support`.
 - В UI видны поля `mode`, `confidence`, `fallback_used`, `sources`.
+- Для последнего ответа отображается причина маршрутизации и метрики принятия решения.
 - Есть история сессии и очередь оператора.
 
 ### Данные и миграции
@@ -59,6 +65,7 @@
 
 - В `compose.yml` добавлен сервис `qdrant`.
 - Поддержаны переменные окружения для Google/Ollama/Qdrant.
+- Добавлена возможность полной пересборки индекса с очисткой сиротских векторов.
 - Telegram вынесен в профиль `telegram` и не участвует в web-флоу.
 
 ## 3. Что подтверждено проверками

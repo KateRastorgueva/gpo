@@ -13,14 +13,17 @@ from app.models import (
     FaqEntryUpdate,
     KnowledgeSource,
     KnowledgeSourcePublic,
+    KnowledgeSourceUploadRequest,
     KnowledgeSourcesPublic,
     Message,
     OperatorQueuePublic,
     ReindexRequest,
     ReindexResponse,
+    SupportMetricsPublic,
 )
 from app.services.support_service import (
     create_faq_entry,
+    get_support_metrics,
     index_source,
     list_operator_queue,
     remove_source_vectors,
@@ -34,6 +37,39 @@ router = APIRouter(
     tags=["admin-support"],
     dependencies=[Depends(get_current_active_superuser)],
 )
+
+
+def _create_and_index_source(
+    *,
+    session: SessionDep,
+    title: str | None,
+    source_type: str,
+    source_ref: str | None,
+    content: str,
+) -> KnowledgeSource:
+    source_title = title or source_ref or "Manual source"
+    source = KnowledgeSource(
+        title=source_title,
+        source_type=source_type,  # type: ignore[arg-type]
+        source_ref=source_ref,
+        content=content,
+        status="pending",
+        is_active=True,
+    )
+    session.add(source)
+    session.commit()
+    session.refresh(source)
+    try:
+        index_source(session, source)
+    except Exception as exc:
+        session.rollback()
+        source = session.get(KnowledgeSource, source.id) or source
+        source.status = "failed"
+        session.add(source)
+        session.commit()
+        raise HTTPException(status_code=500, detail=f"Failed to index source: {exc}")
+    session.refresh(source)
+    return source
 
 
 @router.get("/faq", response_model=FaqEntriesPublic)
@@ -112,31 +148,38 @@ async def upload_source(
         raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:
         raise HTTPException(status_code=400, detail=f"Failed to read source: {exc}")
-
-    source_title = title or source_ref or "Manual source"
-    source = KnowledgeSource(
-        title=source_title,
-        source_type=source_type,  # type: ignore[arg-type]
+    return _create_and_index_source(
+        session=session,
+        title=title,
+        source_type=source_type,
         source_ref=source_ref,
         content=content,
-        status="pending",
-        is_active=True,
     )
-    session.add(source)
-    session.commit()
-    session.refresh(source)
 
+
+@router.post("/sources/upload-json", response_model=KnowledgeSourcePublic)
+def upload_source_json(
+    *, session: SessionDep, payload: KnowledgeSourceUploadRequest
+) -> Any:
     try:
-        index_source(session, source)
+        content, source_type, source_ref = resolve_source_content(
+            filename=None,
+            file_bytes=None,
+            source_url=payload.source_url,
+            manual_content=payload.manual_content,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:
-        session.rollback()
-        source = session.get(KnowledgeSource, source.id) or source
-        source.status = "failed"
-        session.add(source)
-        session.commit()
-        raise HTTPException(status_code=500, detail=f"Failed to index source: {exc}")
-    session.refresh(source)
-    return source
+        raise HTTPException(status_code=400, detail=f"Failed to read source: {exc}")
+
+    return _create_and_index_source(
+        session=session,
+        title=payload.title,
+        source_type=source_type,
+        source_ref=source_ref,
+        content=content,
+    )
 
 
 @router.delete("/sources/{source_id}", response_model=Message)
@@ -159,9 +202,19 @@ def reindex_knowledge_sources(
     *, session: SessionDep, body: ReindexRequest | None = None
 ) -> Any:
     source_ids = body.source_ids if body else None
-    reindexed = reindex_sources(session, source_ids=source_ids)
+    full_rebuild = body.full_rebuild if body else False
+    purge_orphans = body.purge_orphans if body else True
+    reindexed, orphan_vectors_removed = reindex_sources(
+        session,
+        source_ids=source_ids,
+        full_rebuild=full_rebuild,
+        purge_orphans=purge_orphans,
+    )
     return ReindexResponse(
-        message="Reindex completed successfully", reindexed_sources=reindexed
+        message="Reindex completed successfully",
+        reindexed_sources=reindexed,
+        orphan_vectors_removed=orphan_vectors_removed,
+        full_rebuild=full_rebuild,
     )
 
 
@@ -169,3 +222,8 @@ def reindex_knowledge_sources(
 def get_operator_queue(session: SessionDep) -> Any:
     queue = list_operator_queue(session)
     return OperatorQueuePublic(data=queue, count=len(queue))
+
+
+@router.get("/metrics", response_model=SupportMetricsPublic)
+def get_admin_support_metrics(session: SessionDep) -> Any:
+    return get_support_metrics(session)

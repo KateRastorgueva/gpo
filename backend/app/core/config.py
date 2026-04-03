@@ -121,6 +121,10 @@ class Settings(BaseSettings):
     LOW_CONFIDENCE_MIN: float = 0.65
     LOW_CONFIDENCE_MAX: float = 0.79
     RETRIEVAL_TOP_K: int = 5
+    HYBRID_CANDIDATES_LIMIT: int = 20
+    HYBRID_SEMANTIC_WEIGHT: float = 0.7
+    HYBRID_LEXICAL_WEIGHT: float = 0.3
+    RERANK_WEIGHT: float = 0.25
     CHUNK_SIZE: int = 1000
     CHUNK_OVERLAP: int = 150
 

@@ -15,6 +15,7 @@ import {
   getFaqEntries,
   getKnowledgeSources,
   getOperatorQueue,
+  getSupportMetrics,
   reindexKnowledgeSources,
   uploadKnowledgeSource,
 } from "@/services/supportApi"
@@ -53,6 +54,10 @@ function AdminSupportPage() {
   const queueQuery = useQuery({
     queryKey: ["adminSupportQueue"],
     queryFn: getOperatorQueue,
+  })
+  const metricsQuery = useQuery({
+    queryKey: ["adminSupportMetrics"],
+    queryFn: getSupportMetrics,
   })
 
   const createFaqMutation = useMutation({
@@ -102,14 +107,70 @@ function AdminSupportPage() {
   const reindexMutation = useMutation({
     mutationFn: () => reindexKnowledgeSources(),
     onSuccess: (data) => {
-      showSuccessToast(`Переиндексировано: ${data.reindexed_sources}`)
+      showSuccessToast(
+        `Переиндексировано: ${data.reindexed_sources}, удалено сиротских векторов: ${data.orphan_vectors_removed}`,
+      )
       queryClient.invalidateQueries({ queryKey: ["adminSupportSources"] })
+      queryClient.invalidateQueries({ queryKey: ["adminSupportMetrics"] })
+    },
+    onError: (error: Error) => showErrorToast(error.message),
+  })
+
+  const fullRebuildMutation = useMutation({
+    mutationFn: () =>
+      reindexKnowledgeSources({ fullRebuild: true, purgeOrphans: true }),
+    onSuccess: (data) => {
+      showSuccessToast(
+        `Полная пересборка завершена: ${data.reindexed_sources}, удалено сиротских векторов: ${data.orphan_vectors_removed}`,
+      )
+      queryClient.invalidateQueries({ queryKey: ["adminSupportSources"] })
+      queryClient.invalidateQueries({ queryKey: ["adminSupportMetrics"] })
     },
     onError: (error: Error) => showErrorToast(error.message),
   })
 
   return (
     <div className="grid gap-6">
+      <Card>
+        <CardHeader>
+          <CardTitle>Метрики поддержки</CardTitle>
+        </CardHeader>
+        <CardContent className="grid gap-2 text-sm">
+          <p>
+            Всего запросов:{" "}
+            <span className="font-medium">
+              {metricsQuery.data?.total_requests ?? 0}
+            </span>
+          </p>
+          <p>
+            Доли режимов: FAQ{" "}
+            <span className="font-medium">
+              {((metricsQuery.data?.faq_share ?? 0) * 100).toFixed(1)}%
+            </span>
+            {" | "}RAG{" "}
+            <span className="font-medium">
+              {((metricsQuery.data?.rag_share ?? 0) * 100).toFixed(1)}%
+            </span>
+            {" | "}Operator{" "}
+            <span className="font-medium">
+              {((metricsQuery.data?.operator_share ?? 0) * 100).toFixed(1)}%
+            </span>
+          </p>
+          <p>
+            Средняя уверенность:{" "}
+            <span className="font-medium">
+              {(metricsQuery.data?.average_confidence ?? 0).toFixed(2)}
+            </span>
+          </p>
+          <p>
+            Пустые источники в ответах:{" "}
+            <span className="font-medium">
+              {((metricsQuery.data?.empty_sources_share ?? 0) * 100).toFixed(1)}%
+            </span>
+          </p>
+        </CardContent>
+      </Card>
+
       <Card>
         <CardHeader>
           <CardTitle>FAQ</CardTitle>
@@ -197,6 +258,13 @@ function AdminSupportPage() {
             >
               Reindex
             </LoadingButton>
+            <LoadingButton
+              loading={fullRebuildMutation.isPending}
+              onClick={() => fullRebuildMutation.mutate()}
+              variant="outline"
+            >
+              Полная пересборка
+            </LoadingButton>
           </div>
           <div className="grid gap-2">
             {sourcesQuery.data?.data.map((source) => (
@@ -239,4 +307,3 @@ function AdminSupportPage() {
     </div>
   )
 }
-

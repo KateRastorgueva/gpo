@@ -7,10 +7,12 @@ from sqlmodel import Session
 from app.core.config import settings
 from app.models import FaqEntryCreate
 from app.services.support_service import (
+    _merge_hybrid_results,
     RetrievalResult,
     create_faq_entry,
     faq_similarity,
     generate_answer,
+    rerank_results,
 )
 
 
@@ -42,6 +44,14 @@ def _make_retrieval_results(
     ]
 
 
+def _assert_decision_metrics_shape(body: dict) -> None:
+    assert "decision_metrics" in body
+    metrics = body["decision_metrics"]
+    assert {"top_score", "relevant_chunks", "faq_score", "conflict", "critical"}.issubset(
+        metrics.keys()
+    )
+
+
 def test_support_ask_uses_faq(
     client: TestClient, normal_user_token_headers: dict[str, str], db: Session
 ) -> None:
@@ -64,6 +74,8 @@ def test_support_ask_uses_faq(
     assert body["answer"] == answer
     assert len(body["sources"]) == 1
     assert body["sources"][0]["source_title"] == "FAQ"
+    assert body["route_reason"] == "faq_hit"
+    _assert_decision_metrics_shape(body)
 
 
 def test_faq_similarity_handles_typical_paraphrase_keywords() -> None:
@@ -98,6 +110,8 @@ def test_support_ask_uses_faq_for_paraphrased_typical_question(
     assert body["mode"] == "faq"
     assert body["escalated"] is False
     assert body["answer"] == answer
+    assert body["route_reason"] == "faq_hit"
+    _assert_decision_metrics_shape(body)
 
 
 def test_support_ask_uses_rag_with_fallback_flag(
@@ -129,6 +143,8 @@ def test_support_ask_uses_rag_with_fallback_flag(
     assert body["escalated"] is False
     assert body["fallback_used"] is True
     assert len(body["sources"]) == 2
+    assert body["route_reason"] == "rag_answer"
+    _assert_decision_metrics_shape(body)
 
 
 def test_support_ask_escalates_when_context_missing(
@@ -148,6 +164,8 @@ def test_support_ask_escalates_when_context_missing(
     body = response.json()
     assert body["mode"] == "operator"
     assert body["escalated"] is True
+    assert body["route_reason"] == "insufficient_context"
+    _assert_decision_metrics_shape(body)
 
 
 def test_support_ask_escalates_on_retrieval_failure(
@@ -170,6 +188,8 @@ def test_support_ask_escalates_on_retrieval_failure(
     body = response.json()
     assert body["mode"] == "operator"
     assert body["escalated"] is True
+    assert body["route_reason"] == "retrieval_failure"
+    _assert_decision_metrics_shape(body)
 
 
 def test_support_ask_escalates_when_sources_conflict(
@@ -196,6 +216,8 @@ def test_support_ask_escalates_when_sources_conflict(
     body = response.json()
     assert body["mode"] == "operator"
     assert body["escalated"] is True
+    assert body["route_reason"] == "conflict"
+    _assert_decision_metrics_shape(body)
 
 
 def test_support_ask_escalates_critical_low_confidence(
@@ -222,6 +244,8 @@ def test_support_ask_escalates_critical_low_confidence(
     body = response.json()
     assert body["mode"] == "operator"
     assert body["escalated"] is True
+    assert body["route_reason"] == "critical_low_confidence"
+    _assert_decision_metrics_shape(body)
 
 
 def test_support_ask_marks_low_confidence_non_critical_answers(
@@ -252,6 +276,8 @@ def test_support_ask_marks_low_confidence_non_critical_answers(
     assert body["mode"] == "rag"
     assert body["escalated"] is False
     assert "Требуется проверка актуальности" in body["answer"]
+    assert body["route_reason"] == "rag_answer"
+    _assert_decision_metrics_shape(body)
 
 
 def test_support_history_filters_by_session(
@@ -370,3 +396,58 @@ def test_generate_answer_falls_back_to_ollama() -> None:
 
     assert answer == "Fallback answer"
     assert fallback_used is True
+
+
+def test_merge_hybrid_results_preserves_semantic_only_score() -> None:
+    semantic_results = [
+        RetrievalResult(
+            source_id=uuid.uuid4(),
+            source_title="Semantic source",
+            source_ref="https://example.edu/semantic",
+            chunk_id=uuid.uuid4(),
+            snippet="Модуль описывает учебный процесс.",
+            score=0.95,
+        )
+    ]
+
+    merged = _merge_hybrid_results(semantic_results=semantic_results, lexical_results=[])
+
+    assert len(merged) == 1
+    assert abs(merged[0].score - semantic_results[0].score) < 1e-9
+
+
+def test_rerank_results_does_not_lower_semantic_only_hit() -> None:
+    base_results = [
+        RetrievalResult(
+            source_id=uuid.uuid4(),
+            source_title="Semantic source",
+            source_ref="https://example.edu/semantic",
+            chunk_id=uuid.uuid4(),
+            snippet="Университет публикует регламент учебного процесса.",
+            score=0.95,
+        )
+    ]
+
+    reranked = rerank_results("оплата общежития сроки", base_results)
+
+    assert len(reranked) == 1
+    assert reranked[0].score >= base_results[0].score
+
+
+def test_admin_support_metrics_endpoint(
+    client: TestClient, superuser_token_headers: dict[str, str]
+) -> None:
+    response = client.get(
+        f"{settings.API_V1_STR}/admin/metrics",
+        headers=superuser_token_headers,
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert {
+        "total_requests",
+        "faq_share",
+        "rag_share",
+        "operator_share",
+        "average_confidence",
+        "empty_sources_share",
+    }.issubset(body.keys())
