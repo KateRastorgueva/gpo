@@ -13,6 +13,7 @@
 - UI пользователя: `/support`.
 - UI админа: `/admin-support`.
 - FAQ CRUD, загрузка источников, reindex, очередь оператора.
+- Метрики поддержки: `/api/v1/admin/metrics`.
 - Векторный поиск через Qdrant.
 - LLM orchestration:
 - primary: Google AI Studio (`gemini-flash-latest`)
@@ -20,7 +21,42 @@
 
 ## 2. Быстрый запуск
 
+### Что нужно для запуска (для разработчика после GitHub clone)
+
+- Git
+- Docker Desktop (с Docker Compose v2)
+- Для Windows: WSL2 включен и интегрирован с Docker Desktop
+- Свободные порты: `5173`, `8000`, `5432`, `6333`, `8080`, `8090`, `1080`, `1025`
+
+Обязательные файлы в репозитории:
+
+- `compose.yml`
+- `compose.override.yml`
+- `.env.example` (шаблон)
+
 1. Заполните `.env` (минимум: БД, superuser, `GOOGLE_API_KEY`).
+
+Создать `.env` из шаблона:
+
+```bash
+cp .env.example .env
+```
+
+PowerShell:
+
+```powershell
+Copy-Item .env.example .env
+```
+
+После копирования откройте `.env` и задайте минимум:
+
+- `FIRST_SUPERUSER`, `FIRST_SUPERUSER_PASSWORD`
+- `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`
+- `SECRET_KEY`
+- один из вариантов LLM:
+- `GOOGLE_API_KEY` (рекомендуется) или
+- рабочий локальный Ollama (`OLLAMA_BASE_URL`, `OLLAMA_MODEL`)
+
 2. Поднимите проект:
 
 ```bash
@@ -32,6 +68,37 @@ docker compose up -d
 - Support: <http://localhost:5173/support>
 - Admin Support: <http://localhost:5173/admin-support>
 - API docs: <http://localhost:8000/docs>
+
+Для новичков в backend пошаговый onboarding: [docs/getting-started-backend.md](docs/getting-started-backend.md).
+
+### Безопасное завершение Docker и WSL
+
+1. Остановите контейнеры проекта:
+
+```bash
+docker compose down --remove-orphans
+```
+
+2. Убедитесь, что контейнеры остановлены:
+
+```bash
+docker compose ps
+```
+
+3. Закройте Docker Desktop.
+4. Полностью остановите WSL:
+
+```bash
+wsl --shutdown
+```
+
+5. Опционально проверьте, что дистрибутивы в состоянии `Stopped`:
+
+```bash
+wsl -l -v
+```
+
+`docker compose down -v` используйте только при явной необходимости удалить volume-данные (включая локальную БД).
 
 ## 3. Загрузка стартовых данных
 
@@ -51,7 +118,7 @@ powershell -ExecutionPolicy Bypass -File scripts/import-tusur-sources.ps1
 3. Operator-кейс: редкий/критичный вопрос без достаточного основания, ожидается `mode=operator`.
 
 В API `POST /api/v1/support/ask` проверяйте поля:
-`mode`, `confidence`, `sources`, `escalated`, `fallback_used`.
+`mode`, `confidence`, `sources`, `escalated`, `fallback_used`, `route_reason`, `decision_metrics`.
 
 ## 5. Тесты
 
@@ -93,6 +160,8 @@ bun run test
 
 ## 8. Документы проекта
 
+- [docs/README.md](docs/README.md) — карта документации и быстрый маршрут.
+- [AGENTS.md](AGENTS.md) — правила Codex для workspace.
 - [CURRENT_VERSION.md](CURRENT_VERSION.md) — зафиксированное текущее состояние.
 - [TD.md](TD.md) — техническая документация и gap-анализ.
 - [LINKS.md](LINKS.md) — рабочие URL и endpoint-ы.
@@ -108,3 +177,9 @@ bun run test
 - `openai-docs`: только когда вопрос про OpenAI-платформу.
 - MCP GitHub: PR/ревью/комментарии.
 - Локальная проверка и диагностика проекта: через shell.
+
+## Codex Workspace Navigation
+
+- Правила Codex для workspace: `AGENTS.md`.
+- Быстрый вход агента в новую сессию: `docs/agent-session-checklist.md`.
+- Операционная сводка между сессиями: `AGENT_HANDOFF.md`.
