@@ -15,6 +15,20 @@ const isLoggedIn = () => {
   return localStorage.getItem("access_token") !== null
 }
 
+const hasValidSession = async () => {
+  if (!isLoggedIn()) {
+    return false
+  }
+
+  try {
+    await UsersService.readUserMe()
+    return true
+  } catch {
+    localStorage.removeItem("access_token")
+    return false
+  }
+}
+
 const useAuth = () => {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
@@ -67,4 +81,5 @@ const useAuth = () => {
 }
 
 export { isLoggedIn }
+export { hasValidSession }
 export default useAuth
