@@ -94,6 +94,40 @@ class Settings(BaseSettings):
     FIRST_SUPERUSER: EmailStr
     FIRST_SUPERUSER_PASSWORD: str
 
+    GOOGLE_API_KEY: str | None = None
+    GOOGLE_MODEL: str = "gemini-flash-latest"
+    GOOGLE_EMBEDDING_MODEL: str = "gemini-embedding-001"
+    GOOGLE_API_URL: str = "https://generativelanguage.googleapis.com/v1beta"
+
+    OLLAMA_BASE_URL: str = "http://localhost:11434"
+    OLLAMA_MODEL: str = "llama3.1:8b"
+    OLLAMA_TIMEOUT_SECONDS: int = 30
+
+    QDRANT_HOST: str = "qdrant"
+    QDRANT_PORT: int = 6333
+    QDRANT_API_KEY: str | None = None
+    QDRANT_COLLECTION_NAME: str = "knowledge_chunks"
+    QDRANT_TIMEOUT_SECONDS: int = 30
+
+    EMBEDDING_MODEL_NAME: str = (
+        "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
+    )
+    EMBEDDING_DIM: int = 384
+
+    FAQ_SIMILARITY_THRESHOLD: float = 0.90
+    RAG_TOP_SCORE_THRESHOLD: float = 0.72
+    RAG_RELEVANT_CHUNK_THRESHOLD: float = 0.60
+    CRITICAL_CONFIDENCE_THRESHOLD: float = 0.80
+    LOW_CONFIDENCE_MIN: float = 0.65
+    LOW_CONFIDENCE_MAX: float = 0.79
+    RETRIEVAL_TOP_K: int = 5
+    HYBRID_CANDIDATES_LIMIT: int = 20
+    HYBRID_SEMANTIC_WEIGHT: float = 0.7
+    HYBRID_LEXICAL_WEIGHT: float = 0.3
+    RERANK_WEIGHT: float = 0.25
+    CHUNK_SIZE: int = 1000
+    CHUNK_OVERLAP: int = 150
+
     def _check_default_secret(self, var_name: str, value: str | None) -> None:
         if value == "changethis":
             message = (

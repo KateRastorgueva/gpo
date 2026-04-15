@@ -19,6 +19,12 @@ services:
       - POSTGRES_USER=${POSTGRES_USER?Variable not set}
       - POSTGRES_DB=${POSTGRES_DB?Variable not set}
 
+  qdrant:
+    image: qdrant/qdrant:v1.14.1
+    restart: always
+    volumes:
+      - qdrant-data:/qdrant/storage
+
   adminer:
     image: adminer
     restart: always
@@ -75,6 +81,12 @@ services:
       - POSTGRES_USER=${POSTGRES_USER?Variable not set}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD?Variable not set}
       - SENTRY_DSN=${SENTRY_DSN}
+      - QDRANT_HOST=qdrant
+      - QDRANT_PORT=6333
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      - GOOGLE_MODEL=${GOOGLE_MODEL}
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL}
+      - OLLAMA_MODEL=${OLLAMA_MODEL}
 
   backend:
     image: '${DOCKER_IMAGE_BACKEND?Variable not set}:${TAG-latest}'
@@ -86,6 +98,8 @@ services:
       db:
         condition: service_healthy
         restart: true
+      qdrant:
+        condition: service_started
       prestart:
         condition: service_completed_successfully
     env_file:
@@ -108,6 +122,12 @@ services:
       - POSTGRES_USER=${POSTGRES_USER?Variable not set}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD?Variable not set}
       - SENTRY_DSN=${SENTRY_DSN}
+      - QDRANT_HOST=qdrant
+      - QDRANT_PORT=6333
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      - GOOGLE_MODEL=${GOOGLE_MODEL}
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL}
+      - OLLAMA_MODEL=${OLLAMA_MODEL}
 
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/utils/health-check/"]
@@ -166,13 +186,14 @@ services:
       # Enable redirection for HTTP and HTTPS
       - traefik.http.routers.${STACK_NAME?Variable not set}-frontend-http.middlewares=https-redirect
   telegram-bot:
+    profiles: ["telegram"]
     build:
       context: ./bot
       dockerfile: Dockerfile
     environment:
-      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - SEARCH_API_KEY=${SEARCH_API_KEY}
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - SEARCH_API_KEY=${SEARCH_API_KEY:-}
       - BACKEND_API_URL=http://backend:8000
     volumes:
       - ./data:/app/data
@@ -184,6 +205,7 @@ services:
       - default
 volumes:
   app-db-data:
+  qdrant-data:
 
 networks:
   traefik-public:

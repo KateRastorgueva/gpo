@@ -1,233 +1,185 @@
-# Full Stack FastAPI Template
+# Техподдержка Университета — Web MVP
 
-<a href="https://github.com/fastapi/full-stack-fastapi-template/actions?query=workflow%3A%22Test+Docker+Compose%22" target="_blank"><img src="https://github.com/fastapi/full-stack-fastapi-template/workflows/Test%20Docker%20Compose/badge.svg" alt="Test Docker Compose"></a>
-<a href="https://github.com/fastapi/full-stack-fastapi-template/actions?query=workflow%3A%22Test+Backend%22" target="_blank"><img src="https://github.com/fastapi/full-stack-fastapi-template/workflows/Test%20Backend/badge.svg" alt="Test Backend"></a>
-<a href="https://coverage-badge.samuelcolvin.workers.dev/redirect/fastapi/full-stack-fastapi-template" target="_blank"><img src="https://coverage-badge.samuelcolvin.workers.dev/fastapi/full-stack-fastapi-template.svg" alt="Coverage"></a>
+Актуально на: 2026-04-02
 
-## Technology Stack and Features
+Проект реализует web-версию техподдержки с маршрутизацией запроса:
+`FAQ -> RAG -> Operator`.
 
-- ⚡ [**FastAPI**](https://fastapi.tiangolo.com) for the Python backend API.
-  - 🧰 [SQLModel](https://sqlmodel.tiangolo.com) for the Python SQL database interactions (ORM).
-  - 🔍 [Pydantic](https://docs.pydantic.dev), used by FastAPI, for the data validation and settings management.
-  - 💾 [PostgreSQL](https://www.postgresql.org) as the SQL database.
-- 🚀 [React](https://react.dev) for the frontend.
-  - 💃 Using TypeScript, hooks, [Vite](https://vitejs.dev), and other parts of a modern frontend stack.
-  - 🎨 [Tailwind CSS](https://tailwindcss.com) and [shadcn/ui](https://ui.shadcn.com) for the frontend components.
-  - 🤖 An automatically generated frontend client.
-  - 🧪 [Playwright](https://playwright.dev) for End-to-End testing.
-  - 🦇 Dark mode support.
-- 🐋 [Docker Compose](https://www.docker.com) for development and production.
-- 🔒 Secure password hashing by default.
-- 🔑 JWT (JSON Web Token) authentication.
-- 📫 Email based password recovery.
-- 📬 [Mailcatcher](https://mailcatcher.me) for local email testing during development.
-- ✅ Tests with [Pytest](https://pytest.org).
-- 📞 [Traefik](https://traefik.io) as a reverse proxy / load balancer.
-- 🚢 Deployment instructions using Docker Compose, including how to set up a frontend Traefik proxy to handle automatic HTTPS certificates.
-- 🏭 CI (continuous integration) and CD (continuous deployment) based on GitHub Actions.
+Текущий фокус: только web. Telegram-бот исключен из ближайшего релиза.
 
-### Dashboard Login
+## 1. Что уже есть
 
-[![API docs](img/login.png)](https://github.com/fastapi/full-stack-fastapi-template)
+- Backend pipeline с режимами `faq`, `rag`, `operator`.
+- UI пользователя: `/support`.
+- UI админа: `/admin-support`.
+- FAQ CRUD, загрузка источников, reindex, очередь оператора.
+- Метрики поддержки: `/api/v1/admin/metrics`.
+- Векторный поиск через Qdrant.
+- LLM orchestration:
+- primary: Google AI Studio (`gemini-flash-latest`)
+- fallback: Ollama (`llama3.1:8b`)
 
-### Dashboard - Admin
+## 2. Быстрый запуск
 
-[![API docs](img/dashboard.png)](https://github.com/fastapi/full-stack-fastapi-template)
+### Что нужно для запуска (для разработчика после GitHub clone)
 
-### Dashboard - Items
+- Git
+- Docker Desktop (с Docker Compose v2)
+- Для Windows: WSL2 включен и интегрирован с Docker Desktop
+- Свободные порты: `5173`, `8000`, `5432`, `6333`, `8080`, `8090`, `1080`, `1025`
 
-[![API docs](img/dashboard-items.png)](https://github.com/fastapi/full-stack-fastapi-template)
+Обязательные файлы в репозитории:
 
-### Dashboard - Dark Mode
+- `compose.yml`
+- `compose.override.yml`
+- `.env.example` (шаблон)
 
-[![API docs](img/dashboard-dark.png)](https://github.com/fastapi/full-stack-fastapi-template)
+1. Заполните `.env` (минимум: БД, superuser, `GOOGLE_API_KEY`).
 
-### Interactive API Documentation
-
-[![API docs](img/docs.png)](https://github.com/fastapi/full-stack-fastapi-template)
-
-## How To Use It
-
-You can **just fork or clone** this repository and use it as is.
-
-✨ It just works. ✨
-
-### How to Use a Private Repository
-
-If you want to have a private repository, GitHub won't allow you to simply fork it as it doesn't allow changing the visibility of forks.
-
-But you can do the following:
-
-- Create a new GitHub repo, for example `my-full-stack`.
-- Clone this repository manually, set the name with the name of the project you want to use, for example `my-full-stack`:
+Создать `.env` из шаблона:
 
 ```bash
-git clone git@github.com:fastapi/full-stack-fastapi-template.git my-full-stack
+cp .env.example .env
 ```
 
-- Enter into the new directory:
+PowerShell:
 
-```bash
-cd my-full-stack
+```powershell
+Copy-Item .env.example .env
 ```
 
-- Set the new origin to your new repository, copy it from the GitHub interface, for example:
+После копирования откройте `.env` и задайте минимум:
 
-```bash
-git remote set-url origin git@github.com:octocat/my-full-stack.git
-```
-
-- Add this repo as another "remote" to allow you to get updates later:
-
-```bash
-git remote add upstream git@github.com:fastapi/full-stack-fastapi-template.git
-```
-
-- Push the code to your new repository:
-
-```bash
-git push -u origin master
-```
-
-### Update From the Original Template
-
-After cloning the repository, and after doing changes, you might want to get the latest changes from this original template.
-
-- Make sure you added the original repository as a remote, you can check it with:
-
-```bash
-git remote -v
-
-origin    git@github.com:octocat/my-full-stack.git (fetch)
-origin    git@github.com:octocat/my-full-stack.git (push)
-upstream    git@github.com:fastapi/full-stack-fastapi-template.git (fetch)
-upstream    git@github.com:fastapi/full-stack-fastapi-template.git (push)
-```
-
-- Pull the latest changes without merging:
-
-```bash
-git pull --no-commit upstream master
-```
-
-This will download the latest changes from this template without committing them, that way you can check everything is right before committing.
-
-- If there are conflicts, solve them in your editor.
-
-- Once you are done, commit the changes:
-
-```bash
-git merge --continue
-```
-
-### Configure
-
-You can then update configs in the `.env` files to customize your configurations.
-
-Before deploying it, make sure you change at least the values for:
-
+- `FIRST_SUPERUSER`, `FIRST_SUPERUSER_PASSWORD`
+- `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`
 - `SECRET_KEY`
-- `FIRST_SUPERUSER_PASSWORD`
-- `POSTGRES_PASSWORD`
+- один из вариантов LLM:
+- `GOOGLE_API_KEY` (рекомендуется) или
+- рабочий локальный Ollama (`OLLAMA_BASE_URL`, `OLLAMA_MODEL`)
 
-You can (and should) pass these as environment variables from secrets.
-
-Read the [deployment.md](./deployment.md) docs for more details.
-
-### Generate Secret Keys
-
-Some environment variables in the `.env` file have a default value of `changethis`.
-
-You have to change them with a secret key, to generate secret keys you can run the following command:
+2. Поднимите проект:
 
 ```bash
-python -c "import secrets; print(secrets.token_urlsafe(32))"
+docker compose up -d
 ```
 
-Copy the content and use that as password / secret key. And run that again to generate another secure key.
+3. Откройте:
+- UI: <http://localhost:5173>
+- Support: <http://localhost:5173/support>
+- Admin Support: <http://localhost:5173/admin-support>
+- API docs: <http://localhost:8000/docs>
 
-## How To Use It - Alternative With Copier
+Для новичков в backend пошаговый onboarding: [docs/getting-started-backend.md](docs/getting-started-backend.md).
 
-This repository also supports generating a new project using [Copier](https://copier.readthedocs.io).
+### Безопасное завершение Docker и WSL
 
-It will copy all the files, ask you configuration questions, and update the `.env` files with your answers.
-
-### Install Copier
-
-You can install Copier with:
+1. Остановите контейнеры проекта:
 
 ```bash
-pip install copier
+docker compose down --remove-orphans
 ```
 
-Or better, if you have [`pipx`](https://pipx.pypa.io/), you can run it with:
+2. Убедитесь, что контейнеры остановлены:
 
 ```bash
-pipx install copier
+docker compose ps
 ```
 
-**Note**: If you have `pipx`, installing copier is optional, you could run it directly.
-
-### Generate a Project With Copier
-
-Decide a name for your new project's directory, you will use it below. For example, `my-awesome-project`.
-
-Go to the directory that will be the parent of your project, and run the command with your project's name:
+3. Закройте Docker Desktop.
+4. Полностью остановите WSL:
 
 ```bash
-copier copy https://github.com/fastapi/full-stack-fastapi-template my-awesome-project --trust
+wsl --shutdown
 ```
 
-If you have `pipx` and you didn't install `copier`, you can run it directly:
+5. Опционально проверьте, что дистрибутивы в состоянии `Stopped`:
 
 ```bash
-pipx run copier copy https://github.com/fastapi/full-stack-fastapi-template my-awesome-project --trust
+wsl -l -v
 ```
 
-**Note** the `--trust` option is necessary to be able to execute a [post-creation script](https://github.com/fastapi/full-stack-fastapi-template/blob/master/.copier/update_dotenv.py) that updates your `.env` files.
+`docker compose down -v` используйте только при явной необходимости удалить volume-данные (включая локальную БД).
 
-### Input Variables
+## 3. Загрузка стартовых данных
 
-Copier will ask you for some data, you might want to have at hand before generating the project.
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/import-tusur-sources.ps1
+```
 
-But don't worry, you can just update any of that in the `.env` files afterwards.
+- Seed-файл: `scripts/tusur_sources_seed_v1.json`
+- Скрипт импортирует источники, FAQ и запускает reindex (если не отключать флагами).
 
-The input variables, with their default values (some auto generated) are:
+## 4. Как проверить логику FAQ / RAG / Operator
 
-- `project_name`: (default: `"FastAPI Project"`) The name of the project, shown to API users (in .env).
-- `stack_name`: (default: `"fastapi-project"`) The name of the stack used for Docker Compose labels and project name (no spaces, no periods) (in .env).
-- `secret_key`: (default: `"changethis"`) The secret key for the project, used for security, stored in .env, you can generate one with the method above.
-- `first_superuser`: (default: `"admin@example.com"`) The email of the first superuser (in .env).
-- `first_superuser_password`: (default: `"changethis"`) The password of the first superuser (in .env).
-- `smtp_host`: (default: "") The SMTP server host to send emails, you can set it later in .env.
-- `smtp_user`: (default: "") The SMTP server user to send emails, you can set it later in .env.
-- `smtp_password`: (default: "") The SMTP server password to send emails, you can set it later in .env.
-- `emails_from_email`: (default: `"info@example.com"`) The email account to send emails from, you can set it later in .env.
-- `postgres_password`: (default: `"changethis"`) The password for the PostgreSQL database, stored in .env, you can generate one with the method above.
-- `sentry_dsn`: (default: "") The DSN for Sentry, if you are using it, you can set it later in .env.
+В UI `/support`:
 
-## Backend Development
+1. FAQ-кейс: типовой вопрос из FAQ или близкий перефраз, ожидается `mode=faq`.
+2. RAG-кейс: вопрос по загруженным источникам, ожидается `mode=rag` и `sources`.
+3. Operator-кейс: редкий/критичный вопрос без достаточного основания, ожидается `mode=operator`.
 
-Backend docs: [backend/README.md](./backend/README.md).
+В API `POST /api/v1/support/ask` проверяйте поля:
+`mode`, `confidence`, `sources`, `escalated`, `fallback_used`, `route_reason`, `decision_metrics`.
 
-## Frontend Development
+## 5. Тесты
 
-Frontend docs: [frontend/README.md](./frontend/README.md).
+- Backend support: `backend/tests/api/routes/test_support.py`
+- Frontend e2e: `frontend/tests/*.spec.ts`
 
-## Deployment
+Запуск:
 
-Deployment docs: [deployment.md](./deployment.md).
+```bash
+docker compose exec backend bash scripts/tests-start.sh
+```
 
-## Development
+Точечно backend:
 
-General development docs: [development.md](./development.md).
+```bash
+docker compose exec backend pytest tests/api/routes/test_support.py
+```
 
-This includes using Docker Compose, custom local domains, `.env` configurations, etc.
+Frontend e2e:
 
-## Release Notes
+```bash
+bun run test
+```
 
-Check the file [release-notes.md](./release-notes.md).
+## 6. Краткая архитектура
 
-## License
+- Frontend: React + Vite (`frontend/`)
+- Backend: FastAPI + SQLModel (`backend/`)
+- DB: PostgreSQL
+- Vector DB: Qdrant
+- RAG: ingestion/chunking/embedding/retrieval
+- LLM: Google API + fallback Ollama
 
-The Full Stack FastAPI Template is licensed under the terms of the MIT license.
+## 7. Ограничения текущей версии
+
+- Telegram не входит в релизный контур.
+- Нет полного UI-цикла «оператор ответил пользователю».
+- Качество RAG зависит от полноты и актуальности источников.
+
+## 8. Документы проекта
+
+- [docs/README.md](docs/README.md) — карта документации и быстрый маршрут.
+- [AGENTS.md](AGENTS.md) — правила Codex для workspace.
+- [CURRENT_VERSION.md](CURRENT_VERSION.md) — зафиксированное текущее состояние.
+- [TD.md](TD.md) — техническая документация и gap-анализ.
+- [LINKS.md](LINKS.md) — рабочие URL и endpoint-ы.
+- [AGENT_HANDOFF.md](AGENT_HANDOFF.md) — файл для следующей сессии агента.
+- [TUSUR_TYPICAL_QUESTIONS.md](TUSUR_TYPICAL_QUESTIONS.md) — типовые вопросы для FAQ/RAG.
+- [development.md](development.md), [deployment.md](deployment.md), [SECURITY.md](SECURITY.md), [release-notes.md](release-notes.md).
+- [ТЗ_Техподдержка_университета.docx](ТЗ_Техподдержка_университета.docx).
+
+## 9. SKILLS / MCP (коротко)
+
+- `playwright`: UI smoke/regression.
+- `pdf`: задачи по PDF/ТЗ.
+- `openai-docs`: только когда вопрос про OpenAI-платформу.
+- MCP GitHub: PR/ревью/комментарии.
+- Локальная проверка и диагностика проекта: через shell.
+
+## Codex Workspace Navigation
+
+- Правила Codex для workspace: `AGENTS.md`.
+- Быстрый вход агента в новую сессию: `docs/agent-session-checklist.md`.
+- Операционная сводка между сессиями: `AGENT_HANDOFF.md`.

@@ -115,3 +115,18 @@ test("Redirects to /login when token is wrong", async ({ page }) => {
   await page.waitForURL("/login")
   await expect(page).toHaveURL("/login")
 })
+
+test("Allows opening /login with invalid token and clears stale auth", async ({
+  page,
+}) => {
+  await page.goto("/login")
+  await page.evaluate(() => {
+    localStorage.setItem("access_token", "invalid_token")
+  })
+
+  await page.goto("/login")
+
+  await expect(page).toHaveURL("/login")
+  await expect(page.getByRole("button", { name: "Log In" })).toBeVisible()
+  await expect(page.evaluate(() => localStorage.getItem("access_token"))).resolves.toBeNull()
+})

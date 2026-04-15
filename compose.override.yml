@@ -50,6 +50,11 @@ services:
     ports:
       - "5432:5432"
 
+  qdrant:
+    restart: "no"
+    ports:
+      - "6333:6333"
+
   adminer:
     restart: "no"
     ports:
@@ -101,7 +106,7 @@ services:
       context: .
       dockerfile: frontend/Dockerfile
       args:
-        - VITE_API_URL=http://localhost:8000
+        - VITE_API_URL=http://127.0.0.1:8000
         - NODE_ENV=development
 
   playwright:
