@@ -1,51 +1,58 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { createFileRoute } from "@tanstack/react-router"
-import { useState } from "react"
+import { useEffect, useRef, useState } from "react"
 
-import { Badge } from "@/components/ui/badge"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { LoadingButton } from "@/components/ui/loading-button"
+import { Message } from "@/components/Support/Message"
 import useCustomToast from "@/hooks/useCustomToast"
 import {
   askSupport,
   getSupportHistory,
-  type SourceAttribution,
-  type SupportAskResponse,
 } from "@/services/supportApi"
 
-const getOrCreateSessionId = () => {
-  const key = "support_session_id"
-  const existing = localStorage.getItem(key)
-  if (existing) return existing
-  const next = crypto.randomUUID()
-  localStorage.setItem(key, next)
-  return next
+type Chat = {
+  sessionId: string
+  title: string
+  lastMessageAt: string
+  messageCount: number
 }
 
-const modeBadgeVariant = (mode: string) => {
-  if (mode === "faq") return "default"
-  if (mode === "rag") return "secondary"
-  return "destructive"
-}
+const STORAGE_KEY = "support_chats"
 
-const modeLabel = (mode: string) => {
-  if (mode === "faq") return "FAQ template"
-  if (mode === "rag") return "RAG from sources"
-  return "Operator escalation"
-}
-
-const routeReasonLabel = (reason: string) => {
-  const labels: Record<string, string> = {
-    faq_hit: "Найдено совпадение в FAQ",
-    rag_answer: "Ответ сформирован по источникам",
-    insufficient_context: "Недостаточно контекста в базе знаний",
-    conflict: "Конфликт релевантных источников",
-    retrieval_failure: "Поиск по знаниям недоступен",
-    critical_low_confidence: "Критичный вопрос при низкой уверенности",
-    llm_failure: "Ошибка генерации ответа",
-    empty_answer: "Пустой ответ модели",
+const getChats = (): Chat[] => {
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY)
+    return stored ? JSON.parse(stored) : []
+  } catch {
+    return []
   }
-  return labels[reason] || reason
+}
+
+const saveChats = (chats: Chat[]) => {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(chats))
+}
+
+const createNewChat = (): Chat => {
+  const sessionId = crypto.randomUUID()
+  const chat: Chat = {
+    sessionId,
+    title: "Новый чат",
+    lastMessageAt: new Date().toISOString(),
+    messageCount: 0,
+  }
+  const chats = getChats()
+  chats.unshift(chat)
+  saveChats(chats)
+  return chat
+}
+
+const updateChat = (sessionId: string, updates: Partial<Chat>) => {
+  const chats = getChats()
+  const index = chats.findIndex(c => c.sessionId === sessionId)
+  if (index !== -1) {
+    chats[index] = { ...chats[index], ...updates }
+    saveChats(chats)
+  }
 }
 
 export const Route = createFileRoute("/_layout/support")({
@@ -57,33 +64,49 @@ export const Route = createFileRoute("/_layout/support")({
 
 function SupportPage() {
   const { showErrorToast, showSuccessToast } = useCustomToast()
+  const [chats, setChats] = useState<Chat[]>(() => getChats())
+  const [selectedChat, setSelectedChat] = useState<Chat | null>(null)
   const [question, setQuestion] = useState("")
-  const [latestResponse, setLatestResponse] = useState<SupportAskResponse | null>(
-    null,
-  )
-  const [sessionId] = useState(getOrCreateSessionId)
   const queryClient = useQueryClient()
+  const messagesEndRef = useRef<HTMLDivElement>(null)
 
   const historyQuery = useQuery({
-    queryKey: ["supportHistory", sessionId],
-    queryFn: () => getSupportHistory(sessionId),
+    queryKey: ["supportHistory", selectedChat?.sessionId],
+    queryFn: () => selectedChat ? getSupportHistory(selectedChat.sessionId) : Promise.resolve({ data: [], count: 0 }),
+    enabled: !!selectedChat,
   })
 
   const askMutation = useMutation({
-    mutationFn: () => askSupport({ question, session_id: sessionId, channel: "web" }),
-    onSuccess: (response) => {
-      setLatestResponse(response)
+    mutationFn: () => askSupport({ question, session_id: selectedChat!.sessionId, channel: "web" }),
+    onSuccess: () => {
       setQuestion("")
       showSuccessToast("Ответ получен")
-      queryClient.invalidateQueries({ queryKey: ["supportHistory", sessionId] })
+      queryClient.invalidateQueries({ queryKey: ["supportHistory", selectedChat!.sessionId] })
+      // Update chat title and metadata
+      const history = historyQuery.data?.data || []
+      const firstQuestion = history.length === 0 ? question : history[0].question
+      updateChat(selectedChat!.sessionId, {
+        title: firstQuestion.length > 50 ? firstQuestion.substring(0, 50) + "..." : firstQuestion,
+        lastMessageAt: new Date().toISOString(),
+        messageCount: history.length + 2, // question + answer
+      })
+      setChats(getChats())
     },
     onError: (error: Error) => {
       showErrorToast(error.message)
     },
   })
 
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
+  }
+
+  useEffect(() => {
+    scrollToBottom()
+  }, [historyQuery.data])
+
   const submitQuestion = () => {
-    if (!question.trim()) {
+    if (!question.trim() || !selectedChat) {
       showErrorToast("Введите вопрос")
       return
     }
@@ -91,123 +114,141 @@ function SupportPage() {
     askMutation.mutate()
   }
 
-  return (
-    <div className="grid gap-6">
-      <Card>
-        <CardHeader>
-          <CardTitle>Техподдержка университета</CardTitle>
-        </CardHeader>
-        <CardContent className="grid gap-3">
-          <textarea
-            value={question}
-            onChange={(event) => setQuestion(event.target.value)}
-            rows={4}
-            placeholder="Опишите ваш вопрос"
-            className="w-full rounded-md border bg-background p-3 text-sm"
-          />
-          <div className="flex items-center justify-between">
-            <p className="text-xs text-muted-foreground">
-              Ответ будет сформирован по FAQ/документам или передан оператору.
-            </p>
-            <LoadingButton loading={askMutation.isPending} onClick={submitQuestion}>
-              Отправить
-            </LoadingButton>
-          </div>
-        </CardContent>
-      </Card>
+  const handleKeyPress = (event: React.KeyboardEvent) => {
+    if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault()
+      submitQuestion()
+    }
+  }
 
-      {latestResponse && (
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle className="text-lg">Последний ответ</CardTitle>
-            <Badge variant={modeBadgeVariant(latestResponse.mode)}>
-              {latestResponse.mode}
-            </Badge>
-          </CardHeader>
-          <CardContent className="grid gap-3">
-            <p className="text-xs text-muted-foreground">
-              Answer type: {modeLabel(latestResponse.mode)}
-            </p>
-            <p className="text-xs text-muted-foreground">
-              Причина маршрута: {routeReasonLabel(latestResponse.route_reason)}
-            </p>
-            <p className="text-sm whitespace-pre-wrap">{latestResponse.answer}</p>
-            <p className="text-xs text-muted-foreground">
-              confidence: {latestResponse.confidence.toFixed(2)} | fallback:{" "}
-              {latestResponse.fallback_used ? "ollama" : "google"}
-            </p>
-            <p className="text-xs text-muted-foreground">
-              decision: top_score=
-              {latestResponse.decision_metrics.top_score.toFixed(2)}, relevant_chunks=
-              {latestResponse.decision_metrics.relevant_chunks}, faq_score=
-              {latestResponse.decision_metrics.faq_score.toFixed(2)}, conflict=
-              {String(latestResponse.decision_metrics.conflict)}, critical=
-              {String(latestResponse.decision_metrics.critical)}
-            </p>
-            <SourceList sources={latestResponse.sources} />
-          </CardContent>
-        </Card>
-      )}
+  const handleNewChat = () => {
+    const newChat = createNewChat()
+    setChats(getChats())
+    setSelectedChat(newChat)
+  }
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg">История сессии</CardTitle>
-        </CardHeader>
-        <CardContent className="grid gap-3">
+  const handleSelectChat = (chat: Chat) => {
+    setSelectedChat(chat)
+  }
+
+  const handleBackToList = () => {
+    setSelectedChat(null)
+  }
+
+  if (selectedChat) {
+    return (
+      <div className="flex flex-col h-full">
+        <div className="flex items-center gap-4 p-4 border-b">
+          <button
+            onClick={handleBackToList}
+            className="text-muted-foreground hover:text-foreground"
+          >
+            ← Назад к чатам
+          </button>
+          <h2 className="font-semibold truncate">{selectedChat.title}</h2>
+        </div>
+        <div className="flex-1 overflow-y-auto p-4 space-y-4">
           {historyQuery.isPending ? (
-            <p className="text-sm text-muted-foreground">Загрузка истории...</p>
-          ) : null}
-          {historyQuery.data?.data.length ? (
+            <p className="text-sm text-muted-foreground text-center">Загрузка истории...</p>
+          ) : historyQuery.data?.data.length ? (
             historyQuery.data.data.map((entry) => (
-              <div key={entry.request_id} className="rounded-md border p-3">
-                <div className="mb-2 flex items-center gap-2">
-                  <Badge variant={modeBadgeVariant(entry.mode)}>{entry.mode}</Badge>
-                  <span className="text-xs text-muted-foreground">
-                    {modeLabel(entry.mode)}
-                  </span>
-                  <span className="text-xs text-muted-foreground">
-                    {entry.created_at
-                      ? new Date(entry.created_at).toLocaleString()
-                      : ""}
-                  </span>
-                </div>
-                <p className="text-sm font-medium">{entry.question}</p>
-                <p className="mt-1 text-sm whitespace-pre-wrap">{entry.answer}</p>
-                <SourceList sources={entry.sources} />
+              <div key={entry.request_id}>
+                <Message
+                  type="user"
+                  content={entry.question}
+                  createdAt={entry.created_at || undefined}
+                />
+                <Message
+                  type="bot"
+                  content={entry.answer}
+                  mode={entry.mode}
+                  confidence={entry.confidence}
+                  sources={entry.sources}
+                  fallbackUsed={entry.fallback_used}
+                />
               </div>
             ))
           ) : (
-            <p className="text-sm text-muted-foreground">История пока пустая.</p>
+            <div className="text-center text-muted-foreground">
+              <p>Начните разговор с техподдержкой!</p>
+              <p>Задайте свой первый вопрос ниже.</p>
+            </div>
           )}
-        </CardContent>
-      </Card>
+          <div ref={messagesEndRef} />
+        </div>
+        <div className="border-t p-4">
+          <div className="flex gap-2">
+            <textarea
+              value={question}
+              onChange={(event) => setQuestion(event.target.value)}
+              onKeyPress={handleKeyPress}
+              rows={2}
+              placeholder="Опишите ваш вопрос..."
+              className="flex-1 rounded-md border bg-background p-3 text-sm resize-none"
+              disabled={askMutation.isPending}
+            />
+            <LoadingButton
+              loading={askMutation.isPending}
+              onClick={submitQuestion}
+              className="self-end"
+            >
+              Отправить
+            </LoadingButton>
+          </div>
+          <p className="text-xs text-muted-foreground mt-2">
+            Ответ будет сформирован по FAQ/документам или передан оператору.
+          </p>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex flex-col h-full">
+      <div className="flex items-center justify-between p-4 border-b">
+        <h1 className="text-2xl font-bold">Техподдержка</h1>
+        <button
+          onClick={handleNewChat}
+          className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
+        >
+          Новый чат
+        </button>
+      </div>
+      <div className="flex-1 overflow-y-auto">
+        {chats.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-full text-center p-8">
+            <p className="text-muted-foreground mb-4">У вас пока нет активных чатов</p>
+            <button
+              onClick={handleNewChat}
+              className="px-6 py-3 bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
+            >
+              Начать новый чат
+            </button>
+          </div>
+        ) : (
+          <div className="p-4 space-y-2">
+            {chats.map((chat) => (
+              <div
+                key={chat.sessionId}
+                onClick={() => handleSelectChat(chat)}
+                className="p-4 border rounded-lg cursor-pointer hover:bg-muted/50 transition-colors"
+              >
+                <div className="flex items-center justify-between">
+                  <h3 className="font-medium truncate">{chat.title}</h3>
+                  <span className="text-xs text-muted-foreground">
+                    {new Date(chat.lastMessageAt).toLocaleDateString()}
+                  </span>
+                </div>
+                <p className="text-sm text-muted-foreground mt-1">
+                  {chat.messageCount} сообщений
+                </p>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   )
 }
 
-function SourceList({ sources }: { sources: SourceAttribution[] }) {
-  if (!sources.length) return null
-  return (
-    <div className="grid gap-2">
-      <p className="text-xs font-medium uppercase text-muted-foreground">Источники</p>
-      {sources.map((source) => (
-        <div key={`${source.source_id}-${source.chunk_id || "none"}`} className="rounded border p-2 text-xs">
-          <p className="font-medium">{source.source_title}</p>
-          {source.source_ref ? (
-            <a
-              className="text-primary underline break-all"
-              href={source.source_ref}
-              target="_blank"
-              rel="noreferrer"
-            >
-              {source.source_ref}
-            </a>
-          ) : null}
-          {source.snippet ? (
-            <p className="mt-1 text-muted-foreground">{source.snippet}</p>
-          ) : null}
-        </div>
-      ))}
-    </div>
-  )
-}
+

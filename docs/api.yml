@@ -1,0 +1,853 @@
+openapi: 3.0.3
+info:
+  title: GPO-2501 API
+  description: API для управления базой знаний, ИИ, операторами и Telegram-ботом техподдержки
+  version: 1.0.0
+servers:
+  - url: /api
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    KnowledgeItem:
+      type: object
+      properties:
+        id:
+          type: integer
+        question:
+          type: string
+        answer:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    ChatMessage:
+      type: object
+      properties:
+        id:
+          type: integer
+        chat_id:
+          type: string
+          description: Telegram Chat ID
+        role:
+          type: string
+          enum: [user, assistant, operator]
+        content:
+          type: string
+        media_type:
+          type: string
+          enum: [text, photo, document, voice]
+          default: text
+        timestamp:
+          type: string
+          format: date-time
+    ChatResponse:
+      type: object
+      properties:
+        answer:
+          type: string
+        source:
+          type: string
+          enum: [knowledge_base, ai, operator]
+        confidence:
+          type: number
+          format: float
+          description: Уверенность ответа (0-1), актуально для KB
+        suggested_articles:
+          type: array
+          items:
+            type: integer
+          description: ID статей из КБ для ознакомления
+    Operator:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        active:
+          type: boolean
+        current_chats:
+          type: integer
+          description: Количество активных чатов
+    Feedback:
+      type: object
+      properties:
+        id:
+          type: integer
+        message_id:
+          type: integer
+        rating:
+          type: integer
+          enum: [1, 2, 3, 4, 5]
+        comment:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+
+security:
+  - BearerAuth: []
+
+paths:
+  # --- Support Chat & Orchestration ---
+  /support/chat:
+    post:
+      summary: Единый эндпоинт для обработки запроса пользователя (KB + AI)
+      description: |
+        Реализует стратегию "KB First":
+        1. Поиск по Базе Знаний.
+        2. Если уверенность < порога -> запрос к ИИ.
+        3. Сохранение истории диалога.
+      tags:
+        - Support
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - chat_id
+                - message
+              properties:
+                chat_id:
+                  type: string
+                  description: Уникальный идентификатор чата (Telegram Chat ID)
+                message:
+                  type: string
+                  description: Текст сообщения пользователя
+                history:
+                  type: array
+                  description: Последние сообщения для контекста
+                  items:
+                    type: object
+                    properties:
+                      role:
+                        type: string
+                        enum: [user, assistant]
+                      content:
+                        type: string
+      responses:
+        '200':
+          description: Успешный ответ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatResponse'
+        '400':
+          description: Bad Request
+        '500':
+          description: Internal Server Error
+
+  /support/chat/{chat_id}/history:
+    get:
+      summary: Получение истории диалога
+      tags:
+        - Support
+      parameters:
+        - in: path
+          name: chat_id
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 50
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ChatMessage'
+        '404':
+          description: Chat not found
+
+  /support/chat/{chat_id}/escalate:
+    post:
+      summary: Передача диалога оператору (эскалация)
+      description: Создает тикет и уведомляет свободных операторов
+      tags:
+        - Support
+      parameters:
+        - in: path
+          name: chat_id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason:
+                  type: string
+                  description: Причина передачи оператору
+      responses:
+        '200':
+          description: Оператор назначен
+        '202':
+          description: Запрос в очереди ожидания
+        '400':
+          description: Bad Request
+
+  /support/chat/{chat_id}/feedback:
+    post:
+      summary: Отзыв о качестве ответа в чате
+      tags:
+        - Support
+      parameters:
+        - in: path
+          name: chat_id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Feedback'
+      responses:
+        '201':
+          description: Created
+        '400':
+          description: Bad Request
+
+  # --- Knowledge Base ---
+  /knowledge-book:
+    get:
+      summary: Получение всех записей из базы знаний
+      tags:
+        - Knowledge Base
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/KnowledgeItem'
+        '500':
+          description: Internal Server Error
+    post:
+      summary: Добавление новой записи в базу знаний
+      tags:
+        - Knowledge Base
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - question
+                - answer
+              properties:
+                question:
+                  type: string
+                answer:
+                  type: string
+                tags:
+                  type: array
+                  items:
+                    type: string
+      responses:
+        '201':
+          description: Created
+        '400':
+          description: Bad Request
+        '500':
+          description: Internal Server Error
+
+  /knowledge-book/{id}:
+    get:
+      summary: Получение записи по ID
+      tags:
+        - Knowledge Base
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/KnowledgeItem'
+        '404':
+          description: Not Found
+        '500':
+          description: Internal Server Error
+    put:
+      summary: Обновление записи по ID
+      tags:
+        - Knowledge Base
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                question:
+                  type: string
+                answer:
+                  type: string
+                tags:
+                  type: array
+                  items:
+                    type: string
+      responses:
+        '200':
+          description: OK
+        '400':
+          description: Bad Request
+        '404':
+          description: Not Found
+        '500':
+          description: Internal Server Error
+    delete:
+      summary: Удаление записи по ID
+      tags:
+        - Knowledge Base
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        '204':
+          description: No Content
+        '400':
+          description: Bad Request
+        '404':
+          description: Not Found
+        '500':
+          description: Internal Server Error
+
+  /knowledge-book/search:
+    get:
+      summary: Поиск по базе знаний
+      tags:
+        - Knowledge Base
+      parameters:
+        - in: query
+          name: query
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 5
+        - in: query
+          name: min_confidence
+          schema:
+            type: number
+            default: 0.7
+            description: Минимальный порог уверенности
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  allOf:
+                    - $ref: '#/components/schemas/KnowledgeItem'
+                    - type: object
+                      properties:
+                        confidence:
+                          type: number
+                          format: float
+        '400':
+          description: Bad Request
+        '500':
+          description: Internal Server Error
+
+  /knowledge-book/tags:
+    get:
+      summary: Получение всех тегов в базе знаний
+      tags:
+        - Knowledge Base
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+        '400':
+          description: Bad Request
+        '500':
+          description: Internal Server Error
+
+  # --- AI Service ---
+  /ai/generate:
+    post:
+      summary: Получение ответа от ИИ (прямой запрос)
+      description: Используется внутренне или для отладки. Для пользователей используйте /support/chat
+      tags:
+        - AI
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                question:
+                  type: string
+                context:
+                  type: array
+                  items:
+                    type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  answer:
+                    type: string
+                  model:
+                    type: string
+        '400':
+          description: Bad Request
+        '500':
+          description: Internal Server Error
+
+  /ai/feedback:
+    post:
+      summary: Отправка отзыва об ответе ИИ
+      tags:
+        - AI
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                question:
+                  type: string
+                answer:
+                  type: string
+                feedback:
+                  type: string
+                rating:
+                  type: integer
+                  enum: [1, 2, 3, 4, 5]
+      responses:
+        '200':
+          description: OK
+        '400':
+          description: Bad Request
+        '500':
+          description: Internal Server Error
+    get:
+      summary: Получение всех отзывов об ответах ИИ
+      tags:
+        - AI
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Feedback'
+        '400':
+          description: Bad Request
+        '500':
+          description: Internal Server Error
+
+  /ai/vectorize:
+    post:
+      summary: Векторизация текста (для поиска)
+      tags:
+        - AI
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                text:
+                  type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  vector:
+                    type: array
+                    items:
+                      type: number
+        '400':
+          description: Bad Request
+        '500':
+          description: Internal Server Error
+
+  # --- Operators ---
+  /operators:
+    get:
+      summary: Получение всех операторов
+      tags:
+        - Operators
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Operator'
+        '400':
+          description: Bad Request
+        '500':
+          description: Internal Server Error
+    post:
+      summary: Добавление нового оператора
+      tags:
+        - Operators
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                email:
+                  type: string
+      responses:
+        '201':
+          description: Created
+        '400':
+          description: Bad Request
+        '500':
+          description: Internal Server Error
+
+  /operators/{id}:
+    get:
+      summary: Получение оператора по ID
+      tags:
+        - Operators
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Operator'
+        '404':
+          description: Not Found
+        '500':
+          description: Internal Server Error
+    put:
+      summary: Обновление оператора по ID
+      tags:
+        - Operators
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                active:
+                  type: boolean
+      responses:
+        '200':
+          description: OK
+        '400':
+          description: Bad Request
+        '404':
+          description: Not Found
+        '500':
+          description: Internal Server Error
+    delete:
+      summary: Удаление оператора по ID
+      tags:
+        - Operators
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        '204':
+          description: No Content
+        '400':
+          description: Bad Request
+        '404':
+          description: Not Found
+        '500':
+          description: Internal Server Error
+
+  /operators/active:
+    get:
+      summary: Получение всех активных (свободных) операторов
+      tags:
+        - Operators
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Operator'
+        '400':
+          description: Bad Request
+        '500':
+          description: Internal Server Error
+
+  /operators/{id}/status:
+    get:
+      summary: Получение детального статуса оператора
+      tags:
+        - Operators
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: integer
+                  name:
+                    type: string
+                  active:
+                    type: boolean
+                  current_chats:
+                    type: integer
+                  max_chats:
+                    type: integer
+        '400':
+          description: Bad Request
+        '404':
+          description: Not Found
+        '500':
+          description: Internal Server Error
+
+  /operators/{id}/messages:
+    get:
+      summary: Получение истории сообщений оператора
+      tags:
+        - Operators
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ChatMessage'
+        '400':
+          description: Bad Request
+        '404':
+          description: Not Found
+        '500':
+          description: Internal Server Error
+    post:
+      summary: Добавление сообщения оператором в чат
+      tags:
+        - Operators
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - chat_id
+                - content
+              properties:
+                chat_id:
+                  type: string
+                content:
+                  type: string
+      responses:
+        '201':
+          description: Created
+        '400':
+          description: Bad Request
+        '404':
+          description: Not Found
+        '500':
+          description: Internal Server Error
+
+  # --- Analytics ---
+  /analytics/summary:
+    get:
+      summary: Общая статистика системы
+      tags:
+        - Analytics
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  total_chats:
+                    type: integer
+                  resolved_by_kb:
+                    type: integer
+                  resolved_by_ai:
+                    type: integer
+                  resolved_by_operator:
+                    type: integer
+                  avg_satisfaction:
+                    type: number
+        '500':
+          description: Internal Server Error
+
+  /analytics/unanswered:
+    get:
+      summary: Вопросы без ответа в КБ (кандидаты на добавление)
+      tags:
+        - Analytics
+      parameters:
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 20
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    question:
+                      type: string
+                    count:
+                      type: integer
+                    last_asked:
+                      type: string
+                      format: date-time
+        '500':
+          description: Internal Server Error
+
+  # --- Telegram Integration ---
+  /telegram/webhook:
+    post:
+      summary: Webhook для получения обновлений от Telegram Bot API
+      tags:
+        - Telegram
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: OK
+        '400':
+          description: Bad Request
+
+  /telegram/set-webhook:
+    post:
+      summary: Установка webhook в Telegram
+      description: Устанавливает URL для получения обновлений от Telegram Bot API. URL должен быть доступен по HTTPS.
+      tags:
+        - Telegram
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                url:
+                  type: string
+      responses:
+        '200':
+          description: OK
+        '400':
+          description: Bad Request
