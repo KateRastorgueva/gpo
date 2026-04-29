@@ -39,6 +39,7 @@ export type SupportHistoryEntry = {
   confidence: number
   escalated: boolean
   fallback_used: boolean
+  status: string
   created_at?: string | null
 }
 
@@ -67,9 +68,22 @@ export type OperatorQueueEntry = {
   queue_id: string
   request_id: string
   reason: string
-  status: "open" | "in_progress" | "closed"
+  status: "open" | "in_progress" | "closed" | "resolved"
   question: string
   created_at?: string | null
+  reply_text?: string | null
+  reply_created_at?: string | null
+}
+
+export type MyQueueEntry = {
+  queue_id: string
+  request_id: string
+  question: string
+  reason: string
+  status: "open" | "in_progress" | "closed" | "resolved"
+  created_at?: string | null
+  reply_text?: string | null
+  reply_created_at?: string | null
 }
 
 export type SupportMetrics = {
@@ -211,6 +225,28 @@ export const reindexKnowledgeSources = (options?: {
 export const getOperatorQueue = () =>
   request<{ data: OperatorQueueEntry[]; count: number }>(
     "/api/v1/admin/operator-queue",
+    {
+      method: "GET",
+      headers: { Authorization: jsonHeaders().Authorization },
+    },
+  )
+
+export const replyOperatorQueueItem = (
+  queueId: string,
+  payload: { reply_text: string },
+) =>
+  request<OperatorQueueEntry>(
+    `/api/v1/admin/operator-queue/${queueId}`,
+    {
+      method: "PATCH",
+      headers: jsonHeaders(),
+      body: JSON.stringify(payload),
+    },
+  )
+
+export const getMyQueue = () =>
+  request<{ data: MyQueueEntry[]; count: number }>(
+    "/api/v1/support/my-queue",
     {
       method: "GET",
       headers: { Authorization: jsonHeaders().Authorization },

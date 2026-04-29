@@ -19,8 +19,10 @@ from app.models import (
     FaqEntryUpdate,
     KnowledgeChunk,
     KnowledgeSource,
+    MyQueueEntry,
     OperatorQueue,
     OperatorQueueEntry,
+    OperatorReply,
     SourceAttribution,
     SupportAnswer,
     SupportAskRequest,
@@ -1076,6 +1078,7 @@ def list_support_history(
                 confidence=request.confidence,
                 escalated=request.escalated,
                 fallback_used=request.fallback_used,
+                status=request.status,
                 created_at=request.created_at,
             )
         )
@@ -1320,15 +1323,21 @@ def list_operator_queue(session: Session) -> list[OperatorQueueEntry]:
     if not queue_items:
         return []
     request_ids = [item.request_id for item in queue_items]
+    queue_ids = [item.id for item in queue_items]
     requests = session.exec(
         select(SupportRequest).where(SupportRequest.id.in_(request_ids))
     ).all()
     request_map = {request.id: request for request in requests}
+    replies = session.exec(
+        select(OperatorReply).where(OperatorReply.queue_id.in_(queue_ids))
+    ).all()
+    reply_map = {reply.queue_id: reply for reply in replies}
     response: list[OperatorQueueEntry] = []
     for item in queue_items:
         request = request_map.get(item.request_id)
         if not request:
             continue
+        reply = reply_map.get(item.id)
         response.append(
             OperatorQueueEntry(
                 queue_id=item.id,
@@ -1337,6 +1346,99 @@ def list_operator_queue(session: Session) -> list[OperatorQueueEntry]:
                 status=item.status,
                 question=request.question,
                 created_at=item.created_at,
+                reply_text=reply.reply_text if reply else None,
+                reply_created_at=reply.created_at if reply else None,
+            )
+        )
+    return response
+
+
+def reply_to_queue_item(
+    session: Session,
+    queue_item: OperatorQueue,
+    reply_text: str,
+    operator_id: uuid.UUID,
+) -> OperatorQueueEntry:
+    sanitized = _ensure_utf8_text(reply_text)
+    existing = session.exec(
+        select(OperatorReply).where(OperatorReply.queue_id == queue_item.id)
+    ).first()
+    if existing is not None:
+        raise ValueError("Queue item already has a reply")
+
+    reply = OperatorReply(
+        queue_id=queue_item.id,
+        operator_id=operator_id,
+        reply_text=sanitized,
+    )
+    session.add(reply)
+
+    queue_item.status = "resolved"
+    queue_item.updated_at = datetime.now(timezone.utc)
+    session.add(queue_item)
+
+    request = session.get(SupportRequest, queue_item.request_id)
+    if request is not None:
+        request.status = "operator_replied"
+        session.add(request)
+
+    session.commit()
+    session.refresh(reply)
+    session.refresh(queue_item)
+    question = request.question if request is not None else ""
+    return OperatorQueueEntry(
+        queue_id=queue_item.id,
+        request_id=queue_item.request_id,
+        reason=queue_item.reason,
+        status=queue_item.status,
+        question=question,
+        created_at=queue_item.created_at,
+        reply_text=reply.reply_text,
+        reply_created_at=reply.created_at,
+    )
+
+
+def list_my_queue(session: Session, user_id: uuid.UUID) -> list[MyQueueEntry]:
+    statement = (
+        select(SupportRequest)
+        .where(SupportRequest.user_id == user_id)
+        .where(SupportRequest.escalated == True)  # noqa: E712
+        .order_by(col(SupportRequest.created_at).desc())
+    )
+    requests = session.exec(statement).all()
+    if not requests:
+        return []
+    request_ids = [request.id for request in requests]
+    queue_items = session.exec(
+        select(OperatorQueue).where(OperatorQueue.request_id.in_(request_ids))
+    ).all()
+    queue_map = {item.request_id: item for item in queue_items}
+    queue_ids = [item.id for item in queue_items]
+    replies = (
+        session.exec(
+            select(OperatorReply).where(OperatorReply.queue_id.in_(queue_ids))
+        ).all()
+        if queue_ids
+        else []
+    )
+    reply_map = {reply.queue_id: reply for reply in replies}
+
+    response: list[MyQueueEntry] = []
+    for request in requests:
+        queue_item = queue_map.get(request.id)
+        if queue_item is None:
+            continue
+        reply = reply_map.get(queue_item.id)
+        response.append(
+            MyQueueEntry(
+                queue_id=queue_item.id,
+                request_id=request.id,
+                question=request.question,
+                reason=queue_item.reason,
+                status=queue_item.status,
+                created_at=queue_item.created_at,
+                reply_text=reply.reply_text if reply else None,
+                reply_created_at=reply.created_at if reply else None,
             )
         )
     return response

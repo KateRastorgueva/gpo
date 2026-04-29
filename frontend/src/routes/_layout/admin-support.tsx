@@ -17,6 +17,7 @@ import {
   getOperatorQueue,
   getSupportMetrics,
   reindexKnowledgeSources,
+  replyOperatorQueueItem,
   uploadKnowledgeSource,
 } from "@/services/supportApi"
 
@@ -42,6 +43,7 @@ function AdminSupportPage() {
   const [sourceUrl, setSourceUrl] = useState("")
   const [manualContent, setManualContent] = useState("")
   const [sourceFile, setSourceFile] = useState<File | null>(null)
+  const [replyDrafts, setReplyDrafts] = useState<Record<string, string>>({})
 
   const faqQuery = useQuery({
     queryKey: ["adminSupportFaq"],
@@ -111,6 +113,22 @@ function AdminSupportPage() {
         `Переиндексировано: ${data.reindexed_sources}, удалено сиротских векторов: ${data.orphan_vectors_removed}`,
       )
       queryClient.invalidateQueries({ queryKey: ["adminSupportSources"] })
+      queryClient.invalidateQueries({ queryKey: ["adminSupportMetrics"] })
+    },
+    onError: (error: Error) => showErrorToast(error.message),
+  })
+
+  const replyQueueMutation = useMutation({
+    mutationFn: ({ queueId, text }: { queueId: string; text: string }) =>
+      replyOperatorQueueItem(queueId, { reply_text: text }),
+    onSuccess: (_data, variables) => {
+      setReplyDrafts((prev) => {
+        const next = { ...prev }
+        delete next[variables.queueId]
+        return next
+      })
+      showSuccessToast("Ответ отправлен")
+      queryClient.invalidateQueries({ queryKey: ["adminSupportQueue"] })
       queryClient.invalidateQueries({ queryKey: ["adminSupportMetrics"] })
     },
     onError: (error: Error) => showErrorToast(error.message),
@@ -288,17 +306,59 @@ function AdminSupportPage() {
         </CardHeader>
         <CardContent className="grid gap-2">
           {queueQuery.data?.data.length ? (
-            queueQuery.data.data.map((item) => (
-              <div key={item.queue_id} className="rounded border p-3">
-                <div className="flex items-center justify-between">
-                  <p className="text-sm font-medium">{item.question}</p>
-                  <Badge variant="destructive">{item.status}</Badge>
+            queueQuery.data.data.map((item) => {
+              const isResolved = item.status === "resolved" || !!item.reply_text
+              const draft = replyDrafts[item.queue_id] ?? ""
+              return (
+                <div key={item.queue_id} className="rounded border p-3">
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm font-medium">{item.question}</p>
+                    <Badge variant={isResolved ? "secondary" : "destructive"}>
+                      {item.status}
+                    </Badge>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Причина: {item.reason}
+                  </p>
+                  {isResolved && item.reply_text ? (
+                    <div className="mt-2 rounded bg-muted p-2 text-sm">
+                      <p className="text-xs text-muted-foreground">Ответ оператора:</p>
+                      <p>{item.reply_text}</p>
+                    </div>
+                  ) : (
+                    <div className="mt-2 grid gap-2">
+                      <textarea
+                        value={draft}
+                        onChange={(event) =>
+                          setReplyDrafts((prev) => ({
+                            ...prev,
+                            [item.queue_id]: event.target.value,
+                          }))
+                        }
+                        placeholder="Ответ пользователю"
+                        rows={3}
+                        className="w-full rounded-md border bg-background p-2 text-sm"
+                      />
+                      <LoadingButton
+                        loading={
+                          replyQueueMutation.isPending &&
+                          replyQueueMutation.variables?.queueId === item.queue_id
+                        }
+                        disabled={!draft.trim()}
+                        onClick={() =>
+                          replyQueueMutation.mutate({
+                            queueId: item.queue_id,
+                            text: draft.trim(),
+                          })
+                        }
+                      >
+                        Отправить ответ
+                      </LoadingButton>
+                    </div>
+                  )}
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  Причина: {item.reason}
-                </p>
-              </div>
-            ))
+              )
+            })
           ) : (
             <p className="text-sm text-muted-foreground">Очередь пуста</p>
           )}

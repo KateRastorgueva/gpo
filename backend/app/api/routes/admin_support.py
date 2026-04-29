@@ -4,7 +4,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from sqlmodel import col, delete, func, select
 
-from app.api.deps import SessionDep, get_current_active_superuser
+from app.api.deps import CurrentUser, SessionDep, get_current_active_superuser
 from app.models import (
     FaqEntriesPublic,
     FaqEntry,
@@ -16,7 +16,10 @@ from app.models import (
     KnowledgeSourceUploadRequest,
     KnowledgeSourcesPublic,
     Message,
+    OperatorQueue,
+    OperatorQueueEntry,
     OperatorQueuePublic,
+    OperatorReplyCreate,
     ReindexRequest,
     ReindexResponse,
     SupportMetricsPublic,
@@ -28,6 +31,7 @@ from app.services.support_service import (
     list_operator_queue,
     remove_source_vectors,
     reindex_sources,
+    reply_to_queue_item,
     resolve_source_content,
     update_faq_entry,
 )
@@ -222,6 +226,27 @@ def reindex_knowledge_sources(
 def get_operator_queue(session: SessionDep) -> Any:
     queue = list_operator_queue(session)
     return OperatorQueuePublic(data=queue, count=len(queue))
+
+
+@router.patch(
+    "/operator-queue/{queue_id}", response_model=OperatorQueueEntry
+)
+def reply_operator_queue_item(
+    *,
+    session: SessionDep,
+    current_user: CurrentUser,
+    queue_id: uuid.UUID,
+    payload: OperatorReplyCreate,
+) -> Any:
+    queue_item = session.get(OperatorQueue, queue_id)
+    if not queue_item:
+        raise HTTPException(status_code=404, detail="Queue item not found")
+    try:
+        return reply_to_queue_item(
+            session, queue_item, payload.reply_text, current_user.id
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
 
 
 @router.get("/metrics", response_model=SupportMetricsPublic)

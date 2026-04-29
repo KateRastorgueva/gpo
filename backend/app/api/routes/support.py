@@ -3,8 +3,17 @@ from typing import Any
 from fastapi import APIRouter, Query
 
 from app.api.deps import CurrentUser, SessionDep
-from app.models import SupportAskRequest, SupportAskResponse, SupportHistoryPublic
-from app.services.support_service import list_support_history, run_support_pipeline
+from app.models import (
+    MyQueuePublic,
+    SupportAskRequest,
+    SupportAskResponse,
+    SupportHistoryPublic,
+)
+from app.services.support_service import (
+    list_my_queue,
+    list_support_history,
+    run_support_pipeline,
+)
 
 router = APIRouter(prefix="/support", tags=["support"])
 
@@ -30,4 +39,10 @@ def get_support_history(
         session=session, user_id=current_user.id, session_id=session_id, limit=limit
     )
     return SupportHistoryPublic(data=history, count=len(history))
+
+
+@router.get("/my-queue", response_model=MyQueuePublic)
+def get_my_queue(*, session: SessionDep, current_user: CurrentUser) -> Any:
+    items = list_my_queue(session, current_user.id)
+    return MyQueuePublic(data=items, count=len(items))
 

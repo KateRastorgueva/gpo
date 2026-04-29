@@ -315,6 +315,32 @@ class OperatorQueue(SQLModel, table=True):
         default_factory=get_datetime_utc, sa_type=DateTime(timezone=True)  # type: ignore
     )
     request: "SupportRequest" = Relationship(back_populates="queue_item")
+    reply: "OperatorReply" = Relationship(
+        back_populates="queue_item", cascade_delete=True
+    )
+
+
+class OperatorReply(SQLModel, table=True):
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    queue_id: uuid.UUID = Field(
+        foreign_key="operatorqueue.id",
+        nullable=False,
+        unique=True,
+        ondelete="CASCADE",
+        index=True,
+    )
+    operator_id: uuid.UUID = Field(
+        foreign_key="user.id", nullable=False, index=True
+    )
+    reply_text: str = Field(min_length=1, max_length=8000)
+    created_at: datetime | None = Field(
+        default_factory=get_datetime_utc, sa_type=DateTime(timezone=True)  # type: ignore
+    )
+    queue_item: "OperatorQueue" = Relationship(back_populates="reply")
+
+
+class OperatorReplyCreate(SQLModel):
+    reply_text: str = Field(min_length=1, max_length=8000)
 
 
 class SupportAskResponse(SQLModel):
@@ -339,6 +365,7 @@ class SupportHistoryEntry(SQLModel):
     confidence: float = Field(ge=0.0, le=1.0)
     escalated: bool
     fallback_used: bool
+    status: str = Field(default="completed", min_length=1, max_length=20)
     created_at: datetime | None = None
 
 
@@ -376,8 +403,26 @@ class OperatorQueueEntry(SQLModel):
     status: str
     question: str
     created_at: datetime | None = None
+    reply_text: str | None = None
+    reply_created_at: datetime | None = None
 
 
 class OperatorQueuePublic(SQLModel):
     data: list[OperatorQueueEntry]
+    count: int
+
+
+class MyQueueEntry(SQLModel):
+    queue_id: uuid.UUID
+    request_id: uuid.UUID
+    question: str
+    reason: str
+    status: str
+    created_at: datetime | None = None
+    reply_text: str | None = None
+    reply_created_at: datetime | None = None
+
+
+class MyQueuePublic(SQLModel):
+    data: list[MyQueueEntry]
     count: int
