@@ -8,6 +8,7 @@
 - Зафиксировано стратегическое решение: Катин бот не подключается как рантайм; используется как донор идей.
 - Подтверждено, что целевой формат seed JSON совпадает с тем, что принимает `scripts/import-tusur-sources.ps1` и `POST /api/v1/admin/sources/upload-json`.
 - Эталон формата существует: `scripts/tusur_sources_seed_v1.json` (8 источников ТУСУР).
+- Исправлен backend-контракт импорта: при `manual_content + source_url` ссылка сохраняется как `source_ref` и остается видимой в RAG `sources`.
 
 ### ⏳ Осталось
 - **Перевыпустить OpenRouter-ключ** (хардкод в `Chat-bot/console_bot.py` считается скомпрометированным) — разовое срочное действие.
@@ -15,7 +16,7 @@
   - `aggregator/sources.yaml` — список URL (мигрировать из `term_to_url` Катиного бота).
   - `aggregator/collect.py` — скачивание (`requests`) + очистка HTML (портировать `SiteParser._clean_text()` из `Chat-bot/main.py`, BeautifulSoup).
   - Скрипт пишет `aggregator/output/sources_seed.json` в формате `{title, source_url, manual_content, sample_questions}`. API не дёргает.
-- Прогнать ручной цикл: `python aggregator/collect.py` → `pwsh scripts/import-tusur-sources.ps1 -Path aggregator/output/sources_seed.json` → проверить, что в `/admin-support` появились источники, а `/support` отвечает по ним через RAG.
+- Прогнать ручной цикл: `python aggregator/collect.py` → `pwsh scripts/import-tusur-sources.ps1 -SeedPath aggregator/output/sources_seed.json` → проверить, что в `/admin-support` появились источники, а `/support` отвечает по ним через RAG.
 - Автоматизацию (cron/CI) накручивать только после того, как ручной цикл стабильно работает.
 
 ## Решение

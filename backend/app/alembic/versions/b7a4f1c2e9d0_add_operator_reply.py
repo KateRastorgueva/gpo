@@ -1,7 +1,7 @@
 """Add OperatorReply table
 
 Revision ID: b7a4f1c2e9d0
-Revises: 1a31ce608336
+Revises: 3f2d3d2d6e45
 Create Date: 2026-04-29 12:00:00.000000
 
 """
@@ -13,7 +13,7 @@ from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
 revision = "b7a4f1c2e9d0"
-down_revision = "1a31ce608336"
+down_revision = "3f2d3d2d6e45"
 branch_labels = None
 depends_on = None
 

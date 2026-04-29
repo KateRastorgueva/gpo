@@ -334,6 +334,77 @@ def test_operator_queue_contains_escalated_request(
     assert any(item["question"] == question for item in queue_body["data"])
 
 
+def test_operator_reply_workflow_updates_user_queue_and_history(
+    client: TestClient,
+    normal_user_token_headers: dict[str, str],
+    superuser_token_headers: dict[str, str],
+) -> None:
+    question = f"operator reply case {uuid.uuid4()}"
+    session_id = f"reply-session-{uuid.uuid4()}"
+    with (
+        patch("app.services.support_service.find_faq_match", return_value=(None, 0.0)),
+        patch("app.services.support_service.retrieve_relevant_chunks", return_value=[]),
+    ):
+        ask_response = client.post(
+            f"{settings.API_V1_STR}/support/ask",
+            headers=normal_user_token_headers,
+            json={
+                "question": question,
+                "session_id": session_id,
+                "channel": "web",
+            },
+        )
+    assert ask_response.status_code == 200
+    assert ask_response.json()["mode"] == "operator"
+
+    queue_response = client.get(
+        f"{settings.API_V1_STR}/admin/operator-queue",
+        headers=superuser_token_headers,
+    )
+    assert queue_response.status_code == 200
+    queue_item = next(
+        item for item in queue_response.json()["data"] if item["question"] == question
+    )
+
+    reply_text = "Operator answer for the student"
+    reply_response = client.patch(
+        f"{settings.API_V1_STR}/admin/operator-queue/{queue_item['queue_id']}",
+        headers=superuser_token_headers,
+        json={"reply_text": reply_text},
+    )
+    assert reply_response.status_code == 200
+    reply_body = reply_response.json()
+    assert reply_body["status"] == "resolved"
+    assert reply_body["reply_text"] == reply_text
+
+    my_queue_response = client.get(
+        f"{settings.API_V1_STR}/support/my-queue",
+        headers=normal_user_token_headers,
+    )
+    assert my_queue_response.status_code == 200
+    my_queue_item = next(
+        item
+        for item in my_queue_response.json()["data"]
+        if item["request_id"] == queue_item["request_id"]
+    )
+    assert my_queue_item["status"] == "resolved"
+    assert my_queue_item["reply_text"] == reply_text
+
+    history_response = client.get(
+        f"{settings.API_V1_STR}/support/history?session_id={session_id}",
+        headers=normal_user_token_headers,
+    )
+    assert history_response.status_code == 200
+    assert history_response.json()["data"][0]["status"] == "operator_replied"
+
+    duplicate_response = client.patch(
+        f"{settings.API_V1_STR}/admin/operator-queue/{queue_item['queue_id']}",
+        headers=superuser_token_headers,
+        json={"reply_text": "second answer"},
+    )
+    assert duplicate_response.status_code == 409
+
+
 def test_admin_faq_crud(
     client: TestClient, superuser_token_headers: dict[str, str]
 ) -> None:

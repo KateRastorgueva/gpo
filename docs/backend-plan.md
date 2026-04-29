@@ -18,7 +18,7 @@
 - `list_operator_queue()` теперь джойнит `OperatorReply` и возвращает текст ответа.
 - Эндпоинт `PATCH /api/v1/admin/operator-queue/{queue_id}` (использует `current_user.id` как `operator_id`) → `backend/app/api/routes/admin_support.py`.
 - Эндпоинт `GET /api/v1/support/my-queue` → `backend/app/api/routes/support.py`.
-- Alembic-миграция `b7a4f1c2e9d0_add_operator_reply.py` (ревизит `1a31ce608336`).
+- Alembic-миграция `b7a4f1c2e9d0_add_operator_reply.py` (ревизит `3f2d3d2d6e45`, после support/RAG-миграции).
 
 **Блок 1.2 — Статус `operator_replied`:**
 - Выставляется в `reply_to_queue_item()`.
@@ -27,7 +27,13 @@
 **Фронтенд (этапа 1):**
 - Типы и методы `replyOperatorQueueItem`, `getMyQueue` в `frontend/src/services/supportApi.ts`.
 - Форма ответа оператора в карточке очереди → `frontend/src/routes/_layout/admin-support.tsx`.
-- Страница «Мои обращения» → `frontend/src/routes/_layout/my-requests.tsx`.
+- Страница «Мои обращения» → `frontend/src/routes/_layout/my-requests.tsx`, подключена в route tree и sidebar.
+
+**Review-fix после checkpoint-коммита:**
+- Исправлена цепочка Alembic для `OperatorReply`: миграция идет после `3f2d3d2d6e45`.
+- `/my-requests` подключен в `routeTree.gen.ts` и боковом меню.
+- `source_url` сохраняется в `source_ref` даже при импорте готового `manual_content`, чтобы RAG-ответы не теряли ссылку на источник.
+- Добавлены backend-тесты на ответ оператора, пользовательский просмотр ответа и защиту от повторного ответа.
 
 ### ⏳ Осталось
 

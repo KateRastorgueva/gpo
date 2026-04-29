@@ -17,6 +17,7 @@ import { Route as LayoutRouteImport } from './routes/_layout'
 import { Route as LayoutIndexRouteImport } from './routes/_layout/index'
 import { Route as LayoutSupportRouteImport } from './routes/_layout/support'
 import { Route as LayoutSettingsRouteImport } from './routes/_layout/settings'
+import { Route as LayoutMyRequestsRouteImport } from './routes/_layout/my-requests'
 import { Route as LayoutItemsRouteImport } from './routes/_layout/items'
 import { Route as LayoutAdminSupportRouteImport } from './routes/_layout/admin-support'
 import { Route as LayoutAdminRouteImport } from './routes/_layout/admin'
@@ -60,6 +61,11 @@ const LayoutSettingsRoute = LayoutSettingsRouteImport.update({
   path: '/settings',
   getParentRoute: () => LayoutRoute,
 } as any)
+const LayoutMyRequestsRoute = LayoutMyRequestsRouteImport.update({
+  id: '/my-requests',
+  path: '/my-requests',
+  getParentRoute: () => LayoutRoute,
+} as any)
 const LayoutItemsRoute = LayoutItemsRouteImport.update({
   id: '/items',
   path: '/items',
@@ -85,6 +91,7 @@ export interface FileRoutesByFullPath {
   '/admin': typeof LayoutAdminRoute
   '/admin-support': typeof LayoutAdminSupportRoute
   '/items': typeof LayoutItemsRoute
+  '/my-requests': typeof LayoutMyRequestsRoute
   '/settings': typeof LayoutSettingsRoute
   '/support': typeof LayoutSupportRoute
 }
@@ -96,6 +103,7 @@ export interface FileRoutesByTo {
   '/admin': typeof LayoutAdminRoute
   '/admin-support': typeof LayoutAdminSupportRoute
   '/items': typeof LayoutItemsRoute
+  '/my-requests': typeof LayoutMyRequestsRoute
   '/settings': typeof LayoutSettingsRoute
   '/support': typeof LayoutSupportRoute
   '/': typeof LayoutIndexRoute
@@ -110,6 +118,7 @@ export interface FileRoutesById {
   '/_layout/admin': typeof LayoutAdminRoute
   '/_layout/admin-support': typeof LayoutAdminSupportRoute
   '/_layout/items': typeof LayoutItemsRoute
+  '/_layout/my-requests': typeof LayoutMyRequestsRoute
   '/_layout/settings': typeof LayoutSettingsRoute
   '/_layout/support': typeof LayoutSupportRoute
   '/_layout/': typeof LayoutIndexRoute
@@ -125,6 +134,7 @@ export interface FileRouteTypes {
     | '/admin'
     | '/admin-support'
     | '/items'
+    | '/my-requests'
     | '/settings'
     | '/support'
   fileRoutesByTo: FileRoutesByTo
@@ -136,6 +146,7 @@ export interface FileRouteTypes {
     | '/admin'
     | '/admin-support'
     | '/items'
+    | '/my-requests'
     | '/settings'
     | '/support'
     | '/'
@@ -149,6 +160,7 @@ export interface FileRouteTypes {
     | '/_layout/admin'
     | '/_layout/admin-support'
     | '/_layout/items'
+    | '/_layout/my-requests'
     | '/_layout/settings'
     | '/_layout/support'
     | '/_layout/'
@@ -227,6 +239,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LayoutItemsRouteImport
       parentRoute: typeof LayoutRoute
     }
+    '/_layout/my-requests': {
+      id: '/_layout/my-requests'
+      path: '/my-requests'
+      fullPath: '/my-requests'
+      preLoaderRoute: typeof LayoutMyRequestsRouteImport
+      parentRoute: typeof LayoutRoute
+    }
     '/_layout/admin-support': {
       id: '/_layout/admin-support'
       path: '/admin-support'
@@ -248,6 +267,7 @@ interface LayoutRouteChildren {
   LayoutAdminRoute: typeof LayoutAdminRoute
   LayoutAdminSupportRoute: typeof LayoutAdminSupportRoute
   LayoutItemsRoute: typeof LayoutItemsRoute
+  LayoutMyRequestsRoute: typeof LayoutMyRequestsRoute
   LayoutSettingsRoute: typeof LayoutSettingsRoute
   LayoutSupportRoute: typeof LayoutSupportRoute
   LayoutIndexRoute: typeof LayoutIndexRoute
@@ -257,6 +277,7 @@ const LayoutRouteChildren: LayoutRouteChildren = {
   LayoutAdminRoute: LayoutAdminRoute,
   LayoutAdminSupportRoute: LayoutAdminSupportRoute,
   LayoutItemsRoute: LayoutItemsRoute,
+  LayoutMyRequestsRoute: LayoutMyRequestsRoute,
   LayoutSettingsRoute: LayoutSettingsRoute,
   LayoutSupportRoute: LayoutSupportRoute,
   LayoutIndexRoute: LayoutIndexRoute,

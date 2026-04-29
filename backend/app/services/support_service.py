@@ -1181,7 +1181,8 @@ def resolve_source_content(
     manual_content: str | None,
 ) -> tuple[str, str, str | None]:
     if manual_content and manual_content.strip():
-        return _ensure_utf8_text(manual_content), "manual", None
+        source_ref = _ensure_utf8_text(source_url) if source_url else None
+        return _ensure_utf8_text(manual_content), "manual", source_ref
     if source_url:
         text = _extract_text_from_url(source_url)
         return text, "url", _ensure_utf8_text(source_url)
