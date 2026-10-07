@@ -937,13 +937,131 @@ def rerank_results(question: str, results: list[RetrievalResult]) -> list[Retrie
     return reranked[: settings.RETRIEVAL_TOP_K]
 
 
+RAG_EXTRA_STOPWORDS = frozenset(
+    "какой какая какие каких какого сколько можно нужно будет если есть быть где когда кто чей чем через время".split()
+)
+BM25_K1 = 1.4
+BM25_B = 0.75
+RRF_K = 60
+
+
+def _bm25_tokens(value: str) -> list[str]:
+    """Токены для BM25: без стоп-слов, со стеммингом."""
+
+    return [
+        russian_stem(token)
+        for token in _token_set(value)
+        if len(token) > 1 and token not in FAQ_STOPWORDS and token not in RAG_EXTRA_STOPWORDS
+    ]
+
+
+def retrieve_lexical_bm25(
+    session: Session, question: str
+) -> tuple[list[RetrievalResult], dict[uuid.UUID, float]]:
+    """BM25 по всем активным чанкам.
+
+    Возвращает кандидатов, отсортированных по BM25, и покрытие запроса для каждого
+    чанка: долю idf-массы слов запроса, найденных в чанке (0..1). Слова, которых нет
+    в корпусе, считаются максимально информативными и снижают покрытие.
+    """
+
+    rows = session.exec(
+        select(KnowledgeChunk, KnowledgeSource)
+        .join(KnowledgeSource, KnowledgeChunk.source_id == KnowledgeSource.id)
+        .where(KnowledgeSource.is_active == True)  # noqa: E712
+    ).all()
+    query_terms = set(_bm25_tokens(question))
+    if not rows or not query_terms:
+        return [], {}
+
+    docs = [Counter(_bm25_tokens(f"{source.title} {chunk.content}")) for chunk, source in rows]
+    total_docs = len(docs)
+    avg_len = sum(sum(doc.values()) for doc in docs) / total_docs or 1.0
+    doc_freq: Counter[str] = Counter()
+    for doc in docs:
+        doc_freq.update(doc.keys())
+
+    def idf(term: str) -> float:
+        n = doc_freq.get(term, 0)
+        return math.log(1 + (total_docs - n + 0.5) / (n + 0.5))
+
+    unknown_idf = math.log(1 + total_docs)
+    total_mass = sum(idf(t) if doc_freq.get(t) else unknown_idf for t in query_terms) or 1.0
+
+    scored: list[tuple[float, float, KnowledgeChunk, KnowledgeSource]] = []
+    for (chunk, source), doc in zip(rows, docs, strict=True):
+        length = sum(doc.values())
+        bm25 = 0.0
+        matched_mass = 0.0
+        for term in query_terms:
+            freq = doc.get(term, 0)
+            if not freq:
+                continue
+            weight = idf(term)
+            matched_mass += weight
+            bm25 += weight * freq * (BM25_K1 + 1) / (freq + BM25_K1 * (1 - BM25_B + BM25_B * length / avg_len))
+        if bm25 > 0:
+            scored.append((bm25, matched_mass / total_mass, chunk, source))
+    scored.sort(key=lambda item: item[0], reverse=True)
+
+    coverage = {chunk.id: cov for _bm, cov, chunk, _src in scored}
+    results = [
+        RetrievalResult(
+            source_id=source.id,
+            source_title=source.title,
+            source_ref=source.source_ref,
+            chunk_id=chunk.id,
+            snippet=chunk.content,
+            score=_clamp_score(cov),
+        )
+        for _bm, cov, chunk, source in scored[: settings.HYBRID_CANDIDATES_LIMIT]
+    ]
+    return results, coverage
+
+
+def _rrf_merge(
+    semantic_results: list[RetrievalResult],
+    lexical_results: list[RetrievalResult],
+    coverage: dict[uuid.UUID, float],
+) -> list[RetrievalResult]:
+    """Объединяет списки по рангам (RRF), не смешивая несопоставимые шкалы оценок.
+
+    Порядок задаёт RRF. Оценка для маршрутизации: покрытие запроса чанком при hashed-эмбеддингах
+    (их косинусы почти не различают тему), иначе прежняя взвешенная смесь.
+    """
+
+    rrf: dict[str, float] = {}
+    items: dict[str, RetrievalResult] = {}
+    for results in (semantic_results, lexical_results):
+        for rank, item in enumerate(results):
+            key = _result_key(item)
+            rrf[key] = rrf.get(key, 0.0) + 1.0 / (RRF_K + rank + 1)
+            items.setdefault(key, item)
+    blended = {_result_key(i): i.score for i in _merge_hybrid_results(semantic_results, lexical_results)}
+    hashed = get_embedding_backend() == "hashed"
+    merged: list[RetrievalResult] = []
+    for key in sorted(rrf, key=lambda k: rrf[k], reverse=True):
+        base = items[key]
+        score = coverage.get(base.chunk_id, 0.0) if hashed and base.chunk_id else blended.get(key, base.score)
+        merged.append(
+            RetrievalResult(
+                source_id=base.source_id,
+                source_title=base.source_title,
+                source_ref=base.source_ref,
+                chunk_id=base.chunk_id,
+                snippet=base.snippet,
+                score=_clamp_score(score),
+            )
+        )
+    return merged[: settings.RETRIEVAL_TOP_K]
+
+
 def retrieve_relevant_chunks(*, session: Session, question: str) -> list[RetrievalResult]:
     """Возвращает итоговый набор релевантных фрагментов для RAG-ответа."""
 
     semantic = retrieve_semantic_chunks(question)
-    lexical = retrieve_lexical_chunks(session, question)
-    merged = _merge_hybrid_results(semantic, lexical)
-    return rerank_results(question, merged)
+    lexical, coverage = retrieve_lexical_bm25(session, question)
+    return _rrf_merge(semantic, lexical, coverage)
 
 
 _NEGATION_WORDS = ("не", "нельзя", "нет")

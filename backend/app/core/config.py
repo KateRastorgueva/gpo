@@ -124,8 +124,8 @@ class Settings(BaseSettings):
     # Score scales differ per embedding backend: the char-n-gram fallback never
     # reaches the thresholds tuned for sentence-transformers. Calibrated with
     # scripts/calibrate_routing.py, see docs/reviews/2026-10-07-doc-pipeline-review.md.
-    RAG_TOP_SCORE_THRESHOLD_HASHED: float = 0.31
-    RAG_RELEVANT_CHUNK_THRESHOLD_HASHED: float = 0.31
+    RAG_TOP_SCORE_THRESHOLD_HASHED: float = 0.25
+    RAG_RELEVANT_CHUNK_THRESHOLD_HASHED: float = 0.25
     RAG_MIN_RELEVANT_CHUNKS_HASHED: int = 1
     CRITICAL_CONFIDENCE_THRESHOLD: float = 0.80
     LOW_CONFIDENCE_MIN: float = 0.65
