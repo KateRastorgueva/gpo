@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from sqlmodel import col, delete, func, select
 
 from app.api.deps import CurrentUser, SessionDep, get_current_active_superuser
+from app.core.config import settings
 from app.models import (
     FaqEntriesPublic,
     FaqEntry,
@@ -71,7 +72,8 @@ def _create_and_index_source(
         source.status = "failed"
         session.add(source)
         session.commit()
-        raise HTTPException(status_code=500, detail=f"Failed to index source: {exc}")
+        status_code = 400 if isinstance(exc, ValueError) else 500
+        raise HTTPException(status_code=status_code, detail=f"Failed to index source: {exc}")
     session.refresh(source)
     return source
 
@@ -127,7 +129,7 @@ def list_sources(session: SessionDep, skip: int = 0, limit: int = 100) -> Any:
 
 
 @router.post("/sources/upload", response_model=KnowledgeSourcePublic)
-async def upload_source(
+def upload_source(
     *,
     session: SessionDep,
     title: str | None = Form(default=None),
@@ -138,7 +140,15 @@ async def upload_source(
     file_bytes: bytes | None = None
     filename: str | None = None
     if file is not None:
-        file_bytes = await file.read()
+        # Синхронный обработчик: FastAPI выполняет его в threadpool, и долгая
+        # индексация не блокирует event loop воркера.
+        max_bytes = settings.MAX_UPLOAD_SIZE_MB * 1024 * 1024
+        file_bytes = file.file.read(max_bytes + 1)
+        if len(file_bytes) > max_bytes:
+            raise HTTPException(
+                status_code=413,
+                detail=f"File is larger than {settings.MAX_UPLOAD_SIZE_MB} MB",
+            )
         filename = file.filename
 
     try:

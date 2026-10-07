@@ -19,6 +19,16 @@ dependencies = [
     "sentry-sdk[fastapi]>=2.0.0,<3.0.0",
     "pyjwt<3.0.0,>=2.8.0",
     "pwdlib[argon2,bcrypt]>=0.3.0",
+    "pypdf>=5.0.0,<7.0.0",
+    "beautifulsoup4>=4.12.0,<5.0.0",
+    "charset-normalizer>=3.3.0,<4.0.0",
+]
+
+[project.optional-dependencies]
+# Локальная модель embeddings. Тянет torch: в образе ставить CPU-сборку
+# (индекс https://download.pytorch.org/whl/cpu), иначе uv скачает CUDA-вариант.
+embeddings = [
+    "sentence-transformers>=3.0.0,<6.0.0",
 ]
 
 [dependency-groups]

@@ -199,6 +199,7 @@ FAQ_KEYWORD_SYNONYMS = {
 }
 
 _embedding_model: Any | None = None
+_embedding_backend: str | None = None
 
 
 @dataclass
@@ -413,6 +414,48 @@ def _get_sentence_transformer() -> Any | None:
         return None
 
 
+def get_embedding_backend() -> str:
+    """Выбирает backend embeddings один раз на процесс.
+
+    Индекс и запросы должны строиться в одном векторном пространстве, поэтому
+    backend не переключается от вызова к вызову: при сбое выбранного backend
+    embed_texts падает, а не подменяет вектор другим.
+    """
+
+    global _embedding_backend
+    if _embedding_backend is not None:
+        return _embedding_backend
+    configured = settings.EMBEDDING_BACKEND.strip().lower()
+    if configured == "auto":
+        if _get_sentence_transformer() is not None:
+            configured = "sentence-transformers"
+        elif settings.GOOGLE_API_KEY and settings.GOOGLE_EMBEDDING_MODEL.strip():
+            configured = "google"
+        else:
+            configured = "hashed"
+    if configured not in {"sentence-transformers", "google", "hashed"}:
+        raise ValueError(f"Unknown EMBEDDING_BACKEND: {settings.EMBEDDING_BACKEND}")
+    if configured == "sentence-transformers" and _get_sentence_transformer() is None:
+        raise RuntimeError(
+            f"sentence-transformers model {settings.EMBEDDING_MODEL_NAME} is not available"
+        )
+    _embedding_backend = configured
+    return configured
+
+
+def get_embedding_model_id() -> str:
+    """Возвращает идентификатор векторного пространства для payload и проверок."""
+
+    backend = get_embedding_backend()
+    if backend == "sentence-transformers":
+        name = settings.EMBEDDING_MODEL_NAME
+    elif backend == "google":
+        name = settings.GOOGLE_EMBEDDING_MODEL.strip()
+    else:
+        name = "char3gram-md5-v1"
+    return f"{backend}:{name}:{settings.EMBEDDING_DIM}"
+
+
 def _hashed_embedding(text: str, size: int = 384) -> list[float]:
     """Строит резервный embedding через char-n-gram feature hashing.
 
@@ -481,27 +524,32 @@ def _embed_with_google(text: str) -> list[float] | None:
 
 
 def embed_text(text: str) -> list[float]:
-    """Создает embedding для одного текста через доступный backend embeddings."""
+    """Создает embedding для одного текста выбранным backend embeddings."""
 
-    model = _get_sentence_transformer()
-    if model is not None:
-        vector = model.encode(text)  # type: ignore[no-untyped-call]
-        return _resize_vector([float(v) for v in vector], settings.EMBEDDING_DIM)
-    google_vector = _embed_with_google(text)
-    if google_vector is not None:
-        return _resize_vector(google_vector, settings.EMBEDDING_DIM)
-    return _resize_vector(_hashed_embedding(text), settings.EMBEDDING_DIM)
+    return embed_texts([text])[0]
 
 
 def embed_texts(texts: Iterable[str]) -> list[list[float]]:
-    """Создает embeddings для набора текстов с пакетной обработкой при возможности."""
+    """Создает embeddings для набора текстов выбранным backend без подмены."""
 
-    model = _get_sentence_transformer()
     text_list = list(texts)
-    if model is not None and text_list:
-        vectors = model.encode(text_list)  # type: ignore[no-untyped-call]
-        return [[float(v) for v in vector] for vector in vectors]
-    return [embed_text(text) for text in text_list]
+    if not text_list:
+        return []
+    backend = get_embedding_backend()
+    if backend == "sentence-transformers":
+        model = _get_sentence_transformer()
+        raw = model.encode(text_list)  # type: ignore[union-attr]
+        vectors = [[float(v) for v in vector] for vector in raw]
+    elif backend == "google":
+        vectors = []
+        for text in text_list:
+            google_vector = _embed_with_google(text)
+            if google_vector is None:
+                raise RuntimeError("Google embedding request failed")
+            vectors.append(google_vector)
+    else:
+        vectors = [_hashed_embedding(text) for text in text_list]
+    return [_resize_vector(vector, settings.EMBEDDING_DIM) for vector in vectors]
 
 
 def _qdrant_base_url() -> str:
@@ -550,6 +598,15 @@ def ensure_qdrant_collection(vector_size: int) -> None:
     collection_path = f"/collections/{settings.QDRANT_COLLECTION_NAME}"
     response = _qdrant_request("GET", collection_path, allowed_statuses={404})
     if response.status_code != 404:
+        vectors_config = (
+            response.json().get("result", {}).get("config", {}).get("params", {}).get("vectors", {})
+        )
+        existing_size = vectors_config.get("size") if isinstance(vectors_config, dict) else None
+        if existing_size is not None and existing_size != vector_size:
+            raise RuntimeError(
+                f"Qdrant collection has vector size {existing_size}, current embedding "
+                f"backend produces {vector_size}. Run a full reindex."
+            )
         return
     _qdrant_request(
         "PUT",
@@ -729,6 +786,11 @@ def retrieve_semantic_chunks(question: str, limit: int | None = None) -> list[Re
             "vector": query_vector,
             "limit": final_limit,
             "with_payload": True,
+            "filter": {
+                "must": [
+                    {"key": "embedding_model", "match": {"value": get_embedding_model_id()}}
+                ]
+            },
         },
         allowed_statuses={404},
     )
@@ -908,11 +970,8 @@ def has_conflicting_sources(results: list[RetrievalResult]) -> bool:
     источников конфликтом не считаются, чтобы не блокировать многокорпусный RAG.
     """
 
-    strong = [
-        item
-        for item in results
-        if item.score >= settings.RAG_RELEVANT_CHUNK_THRESHOLD
-    ]
+    _top_threshold, chunk_threshold, _min_relevant = routing_thresholds()
+    strong = [item for item in results if item.score >= chunk_threshold]
     if len(strong) < 2:
         return False
 
@@ -1073,6 +1132,22 @@ def _record_support_result(
     )
 
 
+def routing_thresholds() -> tuple[float, float, int]:
+    """Возвращает пороги маршрутизации RAG для текущего backend embeddings."""
+
+    if get_embedding_backend() == "hashed":
+        return (
+            settings.RAG_TOP_SCORE_THRESHOLD_HASHED,
+            settings.RAG_RELEVANT_CHUNK_THRESHOLD_HASHED,
+            settings.RAG_MIN_RELEVANT_CHUNKS_HASHED,
+        )
+    return (
+        settings.RAG_TOP_SCORE_THRESHOLD,
+        settings.RAG_RELEVANT_CHUNK_THRESHOLD,
+        settings.RAG_MIN_RELEVANT_CHUNKS,
+    )
+
+
 def run_support_pipeline(
     *, session: Session, user_id: uuid.UUID | None, payload: SupportAskRequest
 ) -> SupportAskResponse:
@@ -1140,13 +1215,10 @@ def run_support_pipeline(
             decision_metrics=decision_metrics,
         )
 
+    top_threshold, chunk_threshold, min_relevant = routing_thresholds()
     top_score = retrieved[0].score if retrieved else 0.0
-    relevant_chunk_count = sum(
-        1 for item in retrieved if item.score >= settings.RAG_RELEVANT_CHUNK_THRESHOLD
-    )
-    has_context = (
-        relevant_chunk_count >= 2 and top_score >= settings.RAG_TOP_SCORE_THRESHOLD
-    )
+    relevant_chunk_count = sum(1 for item in retrieved if item.score >= chunk_threshold)
+    has_context = relevant_chunk_count >= min_relevant and top_score >= top_threshold
     conflict = has_conflicting_sources(retrieved)
     decision_metrics = DecisionMetrics(
         top_score=_clamp_score(top_score),
@@ -1364,54 +1436,69 @@ def update_faq_entry(session: Session, faq: FaqEntry, faq_in: FaqEntryUpdate) ->
     return faq
 
 
-def _extract_text_from_pdf(data: bytes) -> str:
-    """Извлекает текст из PDF-байтов с помощью pypdf или простого fallback."""
+# Меньше этого числа символов на страницу считаем, что текстового слоя нет (скан).
+_PDF_MIN_CHARS_PER_PAGE = 20
 
-    try:
-        from pypdf import PdfReader
-    except ImportError as exc:
-        fallback_parts = re.findall(rb"\(([^()]*)\)", data)
-        if fallback_parts:
-            merged = " ".join(
-                part.decode("utf-8", errors="ignore")
-                .replace("\\n", " ")
-                .replace("\\r", " ")
-                .replace("\\t", " ")
-                for part in fallback_parts
-            )
-            merged = re.sub(r"\s+", " ", merged).strip()
-            if merged:
-                return merged
-        raise ValueError(
-            "PDF parsing dependency is missing. Install `pypdf` for reliable PDF ingestion."
-        ) from exc
+
+def _extract_text_from_pdf(data: bytes) -> str:
+    """Извлекает текстовый слой PDF через pypdf, страницы разделяет пустой строкой."""
 
     import io
 
-    reader = PdfReader(io.BytesIO(data))
-    text_parts: list[str] = []
-    for page in reader.pages:
-        text_parts.append(page.extract_text() or "")
-    return _ensure_utf8_text("\n".join(text_parts))
+    from pypdf import PdfReader
+    from pypdf.errors import PdfReadError
+
+    if not data.startswith(b"%PDF"):
+        raise ValueError("File is not a PDF document")
+    try:
+        reader = PdfReader(io.BytesIO(data))
+        if reader.is_encrypted:
+            reader.decrypt("")
+        pages = [page.extract_text() or "" for page in reader.pages]
+    except (PdfReadError, ValueError, KeyError) as exc:
+        raise ValueError(f"PDF could not be parsed: {exc}") from exc
+    text = _ensure_utf8_text("\n\n".join(page.strip() for page in pages))
+    if len(text) < _PDF_MIN_CHARS_PER_PAGE * max(1, len(pages)):
+        raise ValueError(
+            "PDF has no text layer (looks like a scan). OCR is not supported yet."
+        )
+    return text
+
+
+def _extract_text_from_html(html: bytes, content_type: str | None = None) -> str:
+    """Извлекает основной текст HTML без навигации, колонтитулов и скриптов."""
+
+    from bs4 import BeautifulSoup
+
+    from_encoding = None
+    if content_type and "charset=" in content_type.lower():
+        from_encoding = content_type.lower().split("charset=")[-1].split(";")[0].strip()
+    # BeautifulSoup сам определяет кодировку по meta или содержимому, если ее нет в заголовке.
+    soup = BeautifulSoup(html, "html.parser", from_encoding=from_encoding)
+    for tag in soup(["script", "style", "noscript", "nav", "header", "footer", "aside", "form"]):
+        tag.decompose()
+    root = soup.find("main") or soup.find("article") or soup.body or soup
+    return _ensure_utf8_text(root.get_text(separator="\n", strip=True))
 
 
 def _extract_text_from_url(url: str) -> str:
-    """Загружает страницу по URL и извлекает из нее человекочитаемый текст."""
+    """Загружает страницу по URL (с редиректами) и извлекает из нее текст."""
 
-    with httpx.Client(timeout=settings.QDRANT_TIMEOUT_SECONDS) as client:
+    max_bytes = settings.MAX_UPLOAD_SIZE_MB * 1024 * 1024
+    with httpx.Client(
+        timeout=settings.URL_FETCH_TIMEOUT_SECONDS,
+        follow_redirects=True,
+        headers={"User-Agent": settings.URL_FETCH_USER_AGENT},
+    ) as client:
         response = client.get(url)
         response.raise_for_status()
-        html = response.text
-    try:
-        from bs4 import BeautifulSoup
-    except ImportError:
-        text_without_tags = re.sub(r"<[^>]+>", " ", html)
-        return re.sub(r"\s+", " ", text_without_tags).strip()
-
-    soup = BeautifulSoup(html, "html.parser")
-    for tag in soup(["script", "style", "noscript"]):
-        tag.decompose()
-    return _ensure_utf8_text(soup.get_text(separator=" ", strip=True))
+        body = response.content
+    if len(body) > max_bytes:
+        raise ValueError(f"Page is larger than {settings.MAX_UPLOAD_SIZE_MB} MB")
+    content_type = response.headers.get("content-type", "")
+    if "application/pdf" in content_type or body.startswith(b"%PDF"):
+        return _extract_text_from_pdf(body)
+    return _extract_text_from_html(body, content_type)
 
 
 def _decode_utf8_text_bytes(data: bytes) -> str:
@@ -1424,8 +1511,12 @@ def _decode_utf8_text_bytes(data: bytes) -> str:
 
 
 def _ensure_utf8_text(value: str) -> str:
-    """Возвращает строку, безопасно приведенную к UTF-8 и очищенную по краям."""
+    """Возвращает строку, безопасно приведенную к UTF-8 и очищенную по краям.
 
+    NUL-символы удаляются: PostgreSQL не хранит их в text-полях.
+    """
+
+    value = value.replace("\x00", "")
     return value.encode("utf-8", errors="replace").decode("utf-8", errors="replace").strip()
 
 
@@ -1450,10 +1541,13 @@ def resolve_source_content(
     if lower_name.endswith(".pdf"):
         text = _extract_text_from_pdf(file_bytes)
         return text, "pdf", _ensure_utf8_text(filename)
+    if lower_name.endswith((".html", ".htm")):
+        text = _extract_text_from_html(file_bytes)
+        return text, "html", _ensure_utf8_text(filename)
     if lower_name.endswith(".txt") or lower_name.endswith(".md"):
         text = _decode_utf8_text_bytes(file_bytes)
         return _ensure_utf8_text(text), "txt", _ensure_utf8_text(filename)
-    raise ValueError("Unsupported file type. Use pdf/txt/md or URL/manual content.")
+    raise ValueError("Unsupported file type. Use pdf/txt/md/html or URL/manual content.")
 
 
 def remove_source_vectors(source_id: uuid.UUID) -> None:
@@ -1499,9 +1593,16 @@ def index_source(session: Session, source: KnowledgeSource) -> int:
     if not vectors:
         raise ValueError("Failed to create embeddings")
     ensure_qdrant_collection(len(vectors[0]))
+    embedding_model = get_embedding_model_id()
 
-    remove_source_vectors(source.id)
-
+    # Старые векторы удаляются только после записи новых и commit: при сбое
+    # посередине остаются лишние точки (их чистит remove_orphan_vectors),
+    # а не чанки без векторов.
+    old_vector_ids = list(
+        session.exec(
+            select(KnowledgeChunk.vector_id).where(KnowledgeChunk.source_id == source.id)
+        ).all()
+    )
     session.exec(delete(KnowledgeChunk).where(KnowledgeChunk.source_id == source.id))
     session.flush()
 
@@ -1525,6 +1626,8 @@ def index_source(session: Session, source: KnowledgeSource) -> int:
                     "source_title": source.title,
                     "source_ref": source.source_ref,
                     "chunk_text": chunk_text_value,
+                    "chunk_index": index,
+                    "embedding_model": embedding_model,
                 },
             }
         )
@@ -1542,6 +1645,10 @@ def index_source(session: Session, source: KnowledgeSource) -> int:
     source.updated_at = datetime.now(timezone.utc)
     session.add(source)
     session.commit()
+    try:
+        _delete_qdrant_points(old_vector_ids)
+    except Exception:
+        pass  # remove_orphan_vectors дочистит при следующей переиндексации
     return len(new_chunks)
 
 

@@ -113,10 +113,20 @@ class Settings(BaseSettings):
         "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
     )
     EMBEDDING_DIM: int = 384
+    # auto | sentence-transformers | google | hashed. "auto" picks one backend
+    # per process (sentence-transformers -> google -> hashed) and never mixes them.
+    EMBEDDING_BACKEND: str = "auto"
 
     FAQ_SIMILARITY_THRESHOLD: float = 0.90
     RAG_TOP_SCORE_THRESHOLD: float = 0.72
     RAG_RELEVANT_CHUNK_THRESHOLD: float = 0.60
+    RAG_MIN_RELEVANT_CHUNKS: int = 2
+    # Score scales differ per embedding backend: the char-n-gram fallback never
+    # reaches the thresholds tuned for sentence-transformers. Calibrated with
+    # scripts/calibrate_routing.py, see docs/reviews/2026-10-07-doc-pipeline-review.md.
+    RAG_TOP_SCORE_THRESHOLD_HASHED: float = 0.31
+    RAG_RELEVANT_CHUNK_THRESHOLD_HASHED: float = 0.31
+    RAG_MIN_RELEVANT_CHUNKS_HASHED: int = 1
     CRITICAL_CONFIDENCE_THRESHOLD: float = 0.80
     LOW_CONFIDENCE_MIN: float = 0.65
     LOW_CONFIDENCE_MAX: float = 0.79
@@ -127,6 +137,10 @@ class Settings(BaseSettings):
     RERANK_WEIGHT: float = 0.25
     CHUNK_SIZE: int = 1000
     CHUNK_OVERLAP: int = 150
+
+    MAX_UPLOAD_SIZE_MB: int = 20
+    URL_FETCH_TIMEOUT_SECONDS: int = 20
+    URL_FETCH_USER_AGENT: str = "KSUP-2501-ingest/1.0"
 
     def _check_default_secret(self, var_name: str, value: str | None) -> None:
         if value == "changethis":
