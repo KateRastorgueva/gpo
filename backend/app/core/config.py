@@ -128,6 +128,9 @@ class Settings(BaseSettings):
     CHUNK_SIZE: int = 1000
     CHUNK_OVERLAP: int = 150
 
+    # Ретенция архива знаний: сколько последних версий хранить на источник (риск R4 плана).
+    KNOWLEDGE_ARCHIVE_MAX_VERSIONS: int = 20
+
     def _check_default_secret(self, var_name: str, value: str | None) -> None:
         if value == "changethis":
             message = (

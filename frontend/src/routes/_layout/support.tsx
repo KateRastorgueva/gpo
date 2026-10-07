@@ -1,16 +1,27 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { createFileRoute } from "@tanstack/react-router"
+import { Send, Sparkles } from "lucide-react"
 import { useState } from "react"
-
+import {
+  EmptyState,
+  ModeBadge,
+  modeLabel,
+  routeReasonLabel,
+  SourceList,
+  StepsTimeline,
+} from "@/components/Support/display"
+import { FeedbackForm } from "@/components/Support/FeedbackForm"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { LoadingButton } from "@/components/ui/loading-button"
+import { Textarea } from "@/components/ui/textarea"
 import useCustomToast from "@/hooks/useCustomToast"
 import {
   askSupport,
   getSupportHistory,
-  type SourceAttribution,
   type SupportAskResponse,
+  type SupportHistoryEntry,
 } from "@/services/supportApi"
 
 const getOrCreateSessionId = () => {
@@ -22,45 +33,19 @@ const getOrCreateSessionId = () => {
   return next
 }
 
-const modeBadgeVariant = (mode: string) => {
-  if (mode === "faq") return "default"
-  if (mode === "rag") return "secondary"
-  return "destructive"
-}
-
-const modeLabel = (mode: string) => {
-  if (mode === "faq") return "FAQ template"
-  if (mode === "rag") return "RAG from sources"
-  return "Operator escalation"
-}
-
-const routeReasonLabel = (reason: string) => {
-  const labels: Record<string, string> = {
-    faq_hit: "Найдено совпадение в FAQ",
-    rag_answer: "Ответ сформирован по источникам",
-    insufficient_context: "Недостаточно контекста в базе знаний",
-    conflict: "Конфликт релевантных источников",
-    retrieval_failure: "Поиск по знаниям недоступен",
-    critical_low_confidence: "Критичный вопрос при низкой уверенности",
-    llm_failure: "Ошибка генерации ответа",
-    empty_answer: "Пустой ответ модели",
-  }
-  return labels[reason] || reason
-}
-
 export const Route = createFileRoute("/_layout/support")({
   component: SupportPage,
   head: () => ({
-    meta: [{ title: "Support - FastAPI Template" }],
+    meta: [{ title: "Техподдержка" }],
   }),
 })
 
 function SupportPage() {
-  const { showErrorToast, showSuccessToast } = useCustomToast()
+  const { showErrorToast } = useCustomToast()
   const [question, setQuestion] = useState("")
-  const [latestResponse, setLatestResponse] = useState<SupportAskResponse | null>(
-    null,
-  )
+  const [latestResponse, setLatestResponse] =
+    useState<SupportAskResponse | null>(null)
+  const [rated, setRated] = useState<Record<string, number>>({})
   const [sessionId] = useState(getOrCreateSessionId)
   const queryClient = useQueryClient()
 
@@ -70,16 +55,18 @@ function SupportPage() {
   })
 
   const askMutation = useMutation({
-    mutationFn: () => askSupport({ question, session_id: sessionId, channel: "web" }),
+    mutationFn: () =>
+      askSupport({
+        question: question.trim(),
+        session_id: sessionId,
+        channel: "web",
+      }),
     onSuccess: (response) => {
       setLatestResponse(response)
       setQuestion("")
-      showSuccessToast("Ответ получен")
       queryClient.invalidateQueries({ queryKey: ["supportHistory", sessionId] })
     },
-    onError: (error: Error) => {
-      showErrorToast(error.message)
-    },
+    onError: (error: Error) => showErrorToast(error.message),
   })
 
   const submitQuestion = () => {
@@ -91,123 +78,182 @@ function SupportPage() {
     askMutation.mutate()
   }
 
+  const history = historyQuery.data?.data ?? []
+
   return (
-    <div className="grid gap-6">
+    <div className="mx-auto grid w-full max-w-3xl gap-6">
+      <div>
+        <h1 className="text-2xl font-semibold">Техподдержка университета</h1>
+        <p className="text-sm text-muted-foreground">
+          Ответ формируется по базе знаний, а если оснований недостаточно —
+          вопрос уходит оператору.
+        </p>
+      </div>
+
       <Card>
-        <CardHeader>
-          <CardTitle>Техподдержка университета</CardTitle>
-        </CardHeader>
-        <CardContent className="grid gap-3">
-          <textarea
+        <CardContent className="grid gap-3 pt-6">
+          <Textarea
             value={question}
             onChange={(event) => setQuestion(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+                submitQuestion()
+              }
+            }}
             rows={4}
-            placeholder="Опишите ваш вопрос"
-            className="w-full rounded-md border bg-background p-3 text-sm"
+            placeholder="Опишите ваш вопрос (Ctrl+Enter — отправить)"
           />
-          <div className="flex items-center justify-between">
+          <div className="flex flex-wrap items-center justify-between gap-2">
             <p className="text-xs text-muted-foreground">
-              Ответ будет сформирован по FAQ/документам или передан оператору.
+              Отвечаем по базе знаний; при нехватке данных подключается
+              оператор.
             </p>
-            <LoadingButton loading={askMutation.isPending} onClick={submitQuestion}>
+            <LoadingButton
+              loading={askMutation.isPending}
+              onClick={submitQuestion}
+            >
+              <Send className="size-4" />
               Отправить
             </LoadingButton>
           </div>
         </CardContent>
       </Card>
 
-      {latestResponse && (
+      {latestResponse ? (
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle className="text-lg">Последний ответ</CardTitle>
-            <Badge variant={modeBadgeVariant(latestResponse.mode)}>
-              {latestResponse.mode}
-            </Badge>
+          <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2">
+            <CardTitle className="text-lg">Ответ</CardTitle>
+            <div className="flex items-center gap-2">
+              <ModeBadge mode={latestResponse.mode} />
+              <Badge variant="outline">
+                уверенность {latestResponse.confidence.toFixed(2)}
+              </Badge>
+            </div>
           </CardHeader>
-          <CardContent className="grid gap-3">
-            <p className="text-xs text-muted-foreground">
-              Answer type: {modeLabel(latestResponse.mode)}
+          <CardContent className="grid gap-4">
+            {latestResponse.escalated ? (
+              <Alert>
+                <Sparkles className="size-4" />
+                <AlertTitle>Вопрос передан оператору</AlertTitle>
+                <AlertDescription>
+                  Автоматический ответ недостаточно надёжен. Оператор ответит, и
+                  ответ появится в истории ниже.
+                </AlertDescription>
+              </Alert>
+            ) : null}
+            <p className="text-sm whitespace-pre-wrap">
+              {latestResponse.answer}
             </p>
-            <p className="text-xs text-muted-foreground">
-              Причина маршрута: {routeReasonLabel(latestResponse.route_reason)}
-            </p>
-            <p className="text-sm whitespace-pre-wrap">{latestResponse.answer}</p>
-            <p className="text-xs text-muted-foreground">
-              confidence: {latestResponse.confidence.toFixed(2)} | fallback:{" "}
-              {latestResponse.fallback_used ? "ollama" : "google"}
-            </p>
-            <p className="text-xs text-muted-foreground">
-              decision: top_score=
-              {latestResponse.decision_metrics.top_score.toFixed(2)}, relevant_chunks=
-              {latestResponse.decision_metrics.relevant_chunks}, faq_score=
-              {latestResponse.decision_metrics.faq_score.toFixed(2)}, conflict=
-              {String(latestResponse.decision_metrics.conflict)}, critical=
-              {String(latestResponse.decision_metrics.critical)}
-            </p>
+            <dl className="grid gap-1 text-xs text-muted-foreground">
+              <div className="flex gap-2">
+                <dt>Тип ответа:</dt>
+                <dd>{modeLabel(latestResponse.mode)}</dd>
+              </div>
+              <div className="flex gap-2">
+                <dt>Причина маршрута:</dt>
+                <dd>{routeReasonLabel(latestResponse.route_reason)}</dd>
+              </div>
+              <div className="flex gap-2">
+                <dt>Генерация:</dt>
+                <dd>
+                  {latestResponse.fallback_used
+                    ? "Ollama (fallback)"
+                    : "Google AI"}
+                </dd>
+              </div>
+            </dl>
             <SourceList sources={latestResponse.sources} />
+            <details className="text-xs text-muted-foreground">
+              <summary className="cursor-pointer">Метрики решения</summary>
+              <pre className="mt-2 overflow-x-auto rounded border bg-muted/30 p-2">
+                {JSON.stringify(latestResponse.decision_metrics, null, 2)}
+              </pre>
+            </details>
+            <FeedbackForm
+              requestId={latestResponse.request_id}
+              onSubmitted={(requestId, rating) =>
+                setRated((current) => ({ ...current, [requestId]: rating }))
+              }
+            />
           </CardContent>
         </Card>
-      )}
+      ) : null}
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-lg">История сессии</CardTitle>
+          <CardTitle className="text-lg">История обращений</CardTitle>
         </CardHeader>
-        <CardContent className="grid gap-3">
+        <CardContent className="grid gap-4">
           {historyQuery.isPending ? (
             <p className="text-sm text-muted-foreground">Загрузка истории...</p>
           ) : null}
-          {historyQuery.data?.data.length ? (
-            historyQuery.data.data.map((entry) => (
-              <div key={entry.request_id} className="rounded-md border p-3">
-                <div className="mb-2 flex items-center gap-2">
-                  <Badge variant={modeBadgeVariant(entry.mode)}>{entry.mode}</Badge>
-                  <span className="text-xs text-muted-foreground">
-                    {modeLabel(entry.mode)}
-                  </span>
-                  <span className="text-xs text-muted-foreground">
-                    {entry.created_at
-                      ? new Date(entry.created_at).toLocaleString()
-                      : ""}
-                  </span>
-                </div>
-                <p className="text-sm font-medium">{entry.question}</p>
-                <p className="mt-1 text-sm whitespace-pre-wrap">{entry.answer}</p>
-                <SourceList sources={entry.sources} />
-              </div>
-            ))
-          ) : (
-            <p className="text-sm text-muted-foreground">История пока пустая.</p>
-          )}
+          {!historyQuery.isPending && history.length === 0 ? (
+            <EmptyState text="Обращений пока нет — задайте первый вопрос." />
+          ) : null}
+          {history.map((entry) => (
+            <HistoryCard
+              key={entry.request_id}
+              entry={entry}
+              rated={rated[entry.request_id]}
+              onSubmitted={(requestId, rating) =>
+                setRated((current) => ({ ...current, [requestId]: rating }))
+              }
+            />
+          ))}
         </CardContent>
       </Card>
     </div>
   )
 }
 
-function SourceList({ sources }: { sources: SourceAttribution[] }) {
-  if (!sources.length) return null
+function HistoryCard({
+  entry,
+  rated,
+  onSubmitted,
+}: {
+  entry: SupportHistoryEntry
+  rated?: number
+  onSubmitted: (requestId: string, rating: number) => void
+}) {
+  // Для пользователя шаги показываем только когда ответ давал не только автомат
+  const showSteps = entry.steps.length > 1
+  const awaitingOperator = entry.steps.some((step) => !step.is_final)
+
   return (
-    <div className="grid gap-2">
-      <p className="text-xs font-medium uppercase text-muted-foreground">Источники</p>
-      {sources.map((source) => (
-        <div key={`${source.source_id}-${source.chunk_id || "none"}`} className="rounded border p-2 text-xs">
-          <p className="font-medium">{source.source_title}</p>
-          {source.source_ref ? (
-            <a
-              className="text-primary underline break-all"
-              href={source.source_ref}
-              target="_blank"
-              rel="noreferrer"
-            >
-              {source.source_ref}
-            </a>
-          ) : null}
-          {source.snippet ? (
-            <p className="mt-1 text-muted-foreground">{source.snippet}</p>
-          ) : null}
-        </div>
-      ))}
+    <div className="grid gap-3 rounded-lg border p-4">
+      <div className="flex flex-wrap items-center gap-2">
+        <ModeBadge mode={entry.mode} />
+        <Badge variant="outline">
+          уверенность {entry.confidence.toFixed(2)}
+        </Badge>
+        {awaitingOperator ? (
+          <Badge variant="destructive">ждёт оператора</Badge>
+        ) : null}
+        <span className="ml-auto text-xs text-muted-foreground">
+          {entry.created_at ? new Date(entry.created_at).toLocaleString() : ""}
+        </span>
+      </div>
+      <div>
+        <p className="text-xs font-medium uppercase text-muted-foreground">
+          Вопрос
+        </p>
+        <p className="text-sm font-medium">{entry.question}</p>
+      </div>
+      <div>
+        <p className="text-xs font-medium uppercase text-muted-foreground">
+          Ответ
+        </p>
+        <p className="text-sm whitespace-pre-wrap">{entry.answer}</p>
+      </div>
+      <SourceList sources={entry.sources} />
+      {showSteps ? <StepsTimeline steps={entry.steps} /> : null}
+      {rated ? (
+        <p className="text-xs text-muted-foreground">
+          Ваша оценка: {rated} из 5
+        </p>
+      ) : (
+        <FeedbackForm requestId={entry.request_id} onSubmitted={onSubmitted} />
+      )}
     </div>
   )
 }

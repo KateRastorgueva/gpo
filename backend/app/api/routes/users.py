@@ -8,13 +8,17 @@ from app import crud
 from app.api.deps import (
     CurrentUser,
     SessionDep,
-    get_current_active_superuser,
+    require_permission,
 )
 from app.core.config import settings
+from app.core.permissions import USER_MANAGE, has_permission
 from app.core.security import get_password_hash, verify_password
 from app.models import (
     Item,
     Message,
+    Role,
+    RolePublic,
+    RolesPublic,
     UpdatePassword,
     User,
     UserCreate,
@@ -29,9 +33,31 @@ from app.utils import generate_new_account_email, send_email
 router = APIRouter(prefix="/users", tags=["users"])
 
 
+def _ensure_role_exists(session: SessionDep, role_id: uuid.UUID | None) -> None:
+    if role_id is not None and session.get(Role, role_id) is None:
+        raise HTTPException(status_code=400, detail="Role not found")
+
+
+@router.get(
+    "/roles",
+    dependencies=[Depends(require_permission(USER_MANAGE))],
+    response_model=RolesPublic,
+)
+def read_roles(session: SessionDep) -> Any:
+    """Список ролей для выбора в админке (права определяются ролью, не флагом)."""
+    roles = session.exec(select(Role).order_by(col(Role.name))).all()
+    return RolesPublic(
+        data=[
+            RolePublic(id=role.id, name=role.name, permissions=role.permissions or [])
+            for role in roles
+        ],
+        count=len(roles),
+    )
+
+
 @router.get(
     "/",
-    dependencies=[Depends(get_current_active_superuser)],
+    dependencies=[Depends(require_permission(USER_MANAGE))],
     response_model=UsersPublic,
 )
 def read_users(session: SessionDep, skip: int = 0, limit: int = 100) -> Any:
@@ -51,7 +77,9 @@ def read_users(session: SessionDep, skip: int = 0, limit: int = 100) -> Any:
 
 
 @router.post(
-    "/", dependencies=[Depends(get_current_active_superuser)], response_model=UserPublic
+    "/",
+    dependencies=[Depends(require_permission(USER_MANAGE))],
+    response_model=UserPublic,
 )
 def create_user(*, session: SessionDep, user_in: UserCreate) -> Any:
     """
@@ -64,6 +92,7 @@ def create_user(*, session: SessionDep, user_in: UserCreate) -> Any:
             detail="The user with this email already exists in the system.",
         )
 
+    _ensure_role_exists(session, user_in.role_id)
     user = crud.create_user(session=session, user_create=user_in)
     if settings.emails_enabled and user_in.email:
         email_data = generate_new_account_email(
@@ -133,7 +162,7 @@ def delete_user_me(session: SessionDep, current_user: CurrentUser) -> Any:
     """
     Delete own user.
     """
-    if current_user.is_superuser:
+    if has_permission(current_user, USER_MANAGE):
         raise HTTPException(
             status_code=403, detail="Super users are not allowed to delete themselves"
         )
@@ -168,7 +197,7 @@ def read_user_by_id(
     user = session.get(User, user_id)
     if user == current_user:
         return user
-    if not current_user.is_superuser:
+    if not has_permission(current_user, USER_MANAGE):
         raise HTTPException(
             status_code=403,
             detail="The user doesn't have enough privileges",
@@ -180,7 +209,7 @@ def read_user_by_id(
 
 @router.patch(
     "/{user_id}",
-    dependencies=[Depends(get_current_active_superuser)],
+    dependencies=[Depends(require_permission(USER_MANAGE))],
     response_model=UserPublic,
 )
 def update_user(
@@ -206,11 +235,14 @@ def update_user(
                 status_code=409, detail="User with this email already exists"
             )
 
+    _ensure_role_exists(session, user_in.role_id)
     db_user = crud.update_user(session=session, db_user=db_user, user_in=user_in)
     return db_user
 
 
-@router.delete("/{user_id}", dependencies=[Depends(get_current_active_superuser)])
+@router.delete(
+    "/{user_id}", dependencies=[Depends(require_permission(USER_MANAGE))]
+)
 def delete_user(
     session: SessionDep, current_user: CurrentUser, user_id: uuid.UUID
 ) -> Message:

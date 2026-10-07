@@ -7,8 +7,8 @@ from sqlmodel import Session
 from app.core.config import settings
 from app.models import FaqEntryCreate
 from app.services.support_service import (
-    _merge_hybrid_results,
     RetrievalResult,
+    _merge_hybrid_results,
     create_faq_entry,
     faq_similarity,
     generate_answer,

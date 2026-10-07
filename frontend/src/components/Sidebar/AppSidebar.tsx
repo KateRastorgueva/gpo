@@ -8,7 +8,7 @@ import {
   SidebarFooter,
   SidebarHeader,
 } from "@/components/ui/sidebar"
-import useAuth from "@/hooks/useAuth"
+import usePermissions from "@/hooks/usePermissions"
 import { type Item, Main } from "./Main"
 import { User } from "./User"
 
@@ -19,15 +19,29 @@ const baseItems: Item[] = [
 ]
 
 export function AppSidebar() {
-  const { user: currentUser } = useAuth()
+  const {
+    user: currentUser,
+    canOpenSupportAdmin,
+    canManageUsers,
+  } = usePermissions()
 
-  const items = currentUser?.is_superuser
-    ? [
-        ...baseItems,
-        { icon: Users, title: "Admin", path: "/admin" },
-        { icon: Settings2, title: "Support Admin", path: "/admin-support" },
-      ]
-    : baseItems
+  // Разделы появляются по правам роли: оператор видит работу с обращениями,
+  // но не управление пользователями, обычный пользователь — только базовые разделы.
+  const items: Item[] = [
+    ...baseItems,
+    ...(canOpenSupportAdmin
+      ? [
+          {
+            icon: Settings2,
+            title: "Support Admin",
+            path: "/admin-support",
+          } satisfies Item,
+        ]
+      : []),
+    ...(canManageUsers
+      ? [{ icon: Users, title: "Admin", path: "/admin" } satisfies Item]
+      : []),
+  ]
 
   return (
     <Sidebar collapsible="icon">

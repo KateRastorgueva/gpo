@@ -2,6 +2,7 @@ from sqlmodel import Session, create_engine, select
 
 from app import crud
 from app.core.config import settings
+from app.core.permissions import ROLE_ADMIN
 from app.models import User, UserCreate
 
 engine = create_engine(str(settings.SQLALCHEMY_DATABASE_URI))
@@ -28,6 +29,16 @@ def init_db(session: Session) -> None:
         user_in = UserCreate(
             email=settings.FIRST_SUPERUSER,
             password=settings.FIRST_SUPERUSER_PASSWORD,
-            is_superuser=True,
         )
+        # Роль по умолчанию назначается в crud, поэтому первый пользователь
+        # дополнительно повышается до администратора ниже.
         user = crud.create_user(session=session, user_create=user_in)
+
+    admin_role = crud.get_role_by_name(session=session, name=ROLE_ADMIN)
+    if admin_role is None:
+        raise RuntimeError(
+            f"Role {ROLE_ADMIN!r} is missing: "
+            "run `alembic upgrade head` to seed roles before creating initial data."
+        )
+    if user.role_id != admin_role.id:
+        user = crud.assign_role(session=session, user=user, role=admin_role)

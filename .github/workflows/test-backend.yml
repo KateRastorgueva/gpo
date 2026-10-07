@@ -12,6 +12,10 @@ on:
 jobs:
   test-backend:
     runs-on: ubuntu-latest
+    # Тесты очищают таблицы, поэтому весь шаг работает на отдельной базе:
+    # контейнер postgres создаёт её как основную, миграции и тесты идут по ней же.
+    env:
+      POSTGRES_DB: app_test
     steps:
       - name: Checkout
         uses: actions/checkout@v6

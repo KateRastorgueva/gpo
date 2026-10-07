@@ -17,10 +17,26 @@ export type DecisionMetrics = {
   critical: boolean
 }
 
+export type SupportRouteMode = "faq" | "rag" | "operator"
+export type SupportStepKind = SupportRouteMode | "human"
+
+export type SupportStep = {
+  step: SupportStepKind
+  step_index: number
+  answer: string
+  is_final: boolean
+  performed_by?: string | null
+  knowledge_id?: string | null
+  knowledge_chunk_id?: string | null
+  response_time_ms?: number | null
+  sources: SourceAttribution[]
+  created_at?: string | null
+}
+
 export type SupportAskResponse = {
   request_id: string
   session_id: string
-  mode: "faq" | "rag" | "operator"
+  mode: SupportRouteMode
   answer: string
   sources: SourceAttribution[]
   confidence: number
@@ -33,13 +49,23 @@ export type SupportAskResponse = {
 export type SupportHistoryEntry = {
   request_id: string
   question: string
-  mode: "faq" | "rag" | "operator"
+  mode: SupportRouteMode
   answer: string
   sources: SourceAttribution[]
   confidence: number
   escalated: boolean
   fallback_used: boolean
   created_at?: string | null
+  steps: SupportStep[]
+}
+
+export type SupportFeedback = {
+  id: string
+  request_id: string
+  user_id?: string | null
+  rating: number
+  comment?: string | null
+  submitted_at: string
 }
 
 export type FaqEntry = {
@@ -54,22 +80,99 @@ export type FaqEntry = {
 export type KnowledgeSource = {
   id: string
   title: string
-  source_type: "pdf" | "txt" | "url" | "manual"
+  source_type: string
   source_ref?: string | null
   is_active: boolean
-  status: "pending" | "indexed" | "failed"
+  status: string
+  category_id?: string | null
+  category_name?: string | null
+  tags: string[]
   last_indexed_at?: string | null
   created_at?: string | null
   updated_at?: string | null
 }
 
-export type OperatorQueueEntry = {
-  queue_id: string
+export type KnowledgeCategory = {
+  id: string
+  name: string
+  created_at?: string | null
+}
+
+export type KnowledgeTag = {
+  id: string
+  name: string
+  created_at?: string | null
+}
+
+export type KnowledgeDoc = {
+  id: string
+  title: string
+  url: string
+  status: string
+  tags: string[]
+  last_indexed_at?: string | null
+  created_at?: string | null
+  updated_at?: string | null
+}
+
+export type KnowledgeArchiveEntry = {
+  id: string
+  knowledge_id: string
+  version: number
+  title: string
+  content: string
+  category_id?: string | null
+  tags: string[]
+  source_type: string
+  archived_at: string
+  archived_by?: string | null
+}
+
+export type KnowledgeSearchHit = {
+  source_id: string
+  source_title: string
+  source_ref?: string | null
+  chunk_id?: string | null
+  snippet?: string | null
+  score: number
+}
+
+export type SupportTicket = {
+  ticket_id: string
   request_id: string
   reason: string
-  status: "open" | "in_progress" | "closed"
+  status: string
   question: string
+  assigned_to?: string | null
+  resolution?: string | null
+  reopened_from_id?: string | null
   created_at?: string | null
+  resolved_at?: string | null
+}
+
+export type ActiveRequest = {
+  request_id: string
+  user_id?: string | null
+  question: string
+  channel: string
+  priority: number
+  assigned_to?: string | null
+  queued_at: string
+  updated_at?: string | null
+}
+
+export type JournalRequest = {
+  request_id: string
+  user_id?: string | null
+  question: string
+  channel: string
+  mode: string
+  status: string
+  confidence: number
+  escalated: boolean
+  created_at?: string | null
+  answered_at?: string | null
+  closed_at?: string | null
 }
 
 export type SupportMetrics = {
@@ -79,12 +182,39 @@ export type SupportMetrics = {
   operator_share: number
   average_confidence: number
   empty_sources_share: number
+  feedback_count: number
+  average_rating: number
 }
+
+export type ReindexResult = {
+  message: string
+  reindexed_sources: number
+  reindexed_docs: number
+  orphan_vectors_removed: number
+  full_rebuild: boolean
+}
+
+export type ListResponse<T> = { data: T[]; count: number }
+
+const authHeader = () => ({
+  Authorization: `Bearer ${localStorage.getItem("access_token") || ""}`,
+})
 
 const jsonHeaders = () => ({
   "Content-Type": "application/json",
-  Authorization: `Bearer ${localStorage.getItem("access_token") || ""}`,
+  ...authHeader(),
 })
+
+/** Ошибка API со статусом — нужна, чтобы различать 409 (конфликт) и остальные сбои. */
+export class ApiError extends Error {
+  status: number
+
+  constructor(message: string, status: number) {
+    super(message)
+    this.name = "ApiError"
+    this.status = status
+  }
+}
 
 const request = async <T>(path: string, init?: RequestInit): Promise<T> => {
   const base = OpenAPI.BASE || ""
@@ -99,12 +229,31 @@ const request = async <T>(path: string, init?: RequestInit): Promise<T> => {
       const body = await response.json()
       detail = body?.detail || detail
     } catch {
-      // no-op
+      // тело может быть пустым
     }
-    throw new Error(detail)
+    throw new ApiError(
+      typeof detail === "string" ? detail : JSON.stringify(detail),
+      response.status,
+    )
+  }
+  if (response.status === 204) {
+    return undefined as T
   }
   return (await response.json()) as T
 }
+
+const query = (
+  params: Record<string, string | number | boolean | undefined>,
+) => {
+  const search = new URLSearchParams()
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== "") search.set(key, String(value))
+  })
+  const asString = search.toString()
+  return asString ? `?${asString}` : ""
+}
+
+/* ------------------------------- пользователь ------------------------------ */
 
 export const askSupport = (payload: {
   question: string
@@ -118,18 +267,28 @@ export const askSupport = (payload: {
   })
 
 export const getSupportHistory = (sessionId: string) =>
-  request<{ data: SupportHistoryEntry[]; count: number }>(
-    `/api/v1/support/history?session_id=${encodeURIComponent(sessionId)}`,
-    {
-      method: "GET",
-      headers: { Authorization: jsonHeaders().Authorization },
-    },
+  request<ListResponse<SupportHistoryEntry>>(
+    `/api/v1/support/history${query({ session_id: sessionId })}`,
+    { method: "GET", headers: authHeader() },
   )
 
+export const submitSupportFeedback = (payload: {
+  request_id: string
+  rating: number
+  comment?: string
+}) =>
+  request<SupportFeedback>("/api/v1/support/feedback", {
+    method: "POST",
+    headers: jsonHeaders(),
+    body: JSON.stringify(payload),
+  })
+
+/* ---------------------------------- FAQ ----------------------------------- */
+
 export const getFaqEntries = () =>
-  request<{ data: FaqEntry[]; count: number }>("/api/v1/admin/faq", {
+  request<ListResponse<FaqEntry>>("/api/v1/admin/faq", {
     method: "GET",
-    headers: { Authorization: jsonHeaders().Authorization },
+    headers: authHeader(),
   })
 
 export const createFaqEntry = (payload: {
@@ -156,13 +315,15 @@ export const updateFaqEntry = (
 export const deleteFaqEntry = (faqId: string) =>
   request<{ message: string }>(`/api/v1/admin/faq/${faqId}`, {
     method: "DELETE",
-    headers: { Authorization: jsonHeaders().Authorization },
+    headers: authHeader(),
   })
 
+/* -------------------------------- источники -------------------------------- */
+
 export const getKnowledgeSources = () =>
-  request<{ data: KnowledgeSource[]; count: number }>("/api/v1/admin/sources", {
+  request<ListResponse<KnowledgeSource>>("/api/v1/admin/sources", {
     method: "GET",
-    headers: { Authorization: jsonHeaders().Authorization },
+    headers: authHeader(),
   })
 
 export const uploadKnowledgeSource = (payload: {
@@ -180,45 +341,219 @@ export const uploadKnowledgeSource = (payload: {
   if (payload.file) formData.set("file", payload.file)
   return request<KnowledgeSource>("/api/v1/admin/sources/upload", {
     method: "POST",
-    headers: { Authorization: jsonHeaders().Authorization },
+    headers: authHeader(),
     body: formData,
   })
 }
 
+export const updateKnowledgeSource = (
+  sourceId: string,
+  payload: {
+    title?: string
+    category_id?: string | null
+    is_active?: boolean
+    tags?: string[]
+  },
+) =>
+  request<KnowledgeSource>(`/api/v1/admin/sources/${sourceId}`, {
+    method: "PATCH",
+    headers: jsonHeaders(),
+    body: JSON.stringify(payload),
+  })
+
+export const deleteKnowledgeSource = (sourceId: string) =>
+  request<{ message: string }>(`/api/v1/admin/sources/${sourceId}`, {
+    method: "DELETE",
+    headers: authHeader(),
+  })
+
+export const deactivateKnowledgeSource = (sourceId: string) =>
+  request<KnowledgeSource>(`/api/v1/admin/sources/${sourceId}/deactivate`, {
+    method: "POST",
+    headers: authHeader(),
+  })
+
+export const getSourceArchive = (sourceId: string) =>
+  request<ListResponse<KnowledgeArchiveEntry>>(
+    `/api/v1/admin/sources/${sourceId}/archive`,
+    { method: "GET", headers: authHeader() },
+  )
+
 export const reindexKnowledgeSources = (options?: {
   sourceIds?: string[]
+  docIds?: string[]
   fullRebuild?: boolean
   purgeOrphans?: boolean
 }) =>
-  request<{
-    message: string
-    reindexed_sources: number
-    orphan_vectors_removed: number
-    full_rebuild: boolean
-  }>(
-    "/api/v1/admin/sources/reindex",
-    {
-      method: "POST",
-      headers: jsonHeaders(),
-      body: JSON.stringify({
-        source_ids: options?.sourceIds,
-        full_rebuild: options?.fullRebuild ?? false,
-        purge_orphans: options?.purgeOrphans ?? true,
-      }),
-    },
+  request<ReindexResult>("/api/v1/admin/sources/reindex", {
+    method: "POST",
+    headers: jsonHeaders(),
+    body: JSON.stringify({
+      source_ids: options?.sourceIds,
+      doc_ids: options?.docIds,
+      full_rebuild: options?.fullRebuild ?? false,
+      purge_orphans: options?.purgeOrphans ?? true,
+    }),
+  })
+
+/* -------------------------------- документы -------------------------------- */
+
+export const getKnowledgeDocs = () =>
+  request<ListResponse<KnowledgeDoc>>("/api/v1/admin/docs", {
+    method: "GET",
+    headers: authHeader(),
+  })
+
+export const createKnowledgeDoc = (payload: {
+  title: string
+  url: string
+  tags?: string[]
+}) =>
+  request<KnowledgeDoc>("/api/v1/admin/docs", {
+    method: "POST",
+    headers: jsonHeaders(),
+    body: JSON.stringify(payload),
+  })
+
+export const updateKnowledgeDoc = (
+  docId: string,
+  payload: { title?: string; url?: string; tags?: string[] },
+) =>
+  request<KnowledgeDoc>(`/api/v1/admin/docs/${docId}`, {
+    method: "PATCH",
+    headers: jsonHeaders(),
+    body: JSON.stringify(payload),
+  })
+
+export const deleteKnowledgeDoc = (docId: string) =>
+  request<{ message: string }>(`/api/v1/admin/docs/${docId}`, {
+    method: "DELETE",
+    headers: authHeader(),
+  })
+
+/** Переиндексация только корпуса документов (источники не затрагиваются). */
+export const reindexKnowledgeDocs = (options?: {
+  docIds?: string[]
+  purgeOrphans?: boolean
+}) =>
+  request<ReindexResult>("/api/v1/admin/docs/reindex", {
+    method: "POST",
+    headers: jsonHeaders(),
+    body: JSON.stringify({
+      doc_ids: options?.docIds,
+      purge_orphans: options?.purgeOrphans ?? true,
+    }),
+  })
+
+/* ------------------------------- таксономия -------------------------------- */
+
+export const getCategories = () =>
+  request<ListResponse<KnowledgeCategory>>("/api/v1/admin/categories", {
+    method: "GET",
+    headers: authHeader(),
+  })
+
+export const createCategory = (name: string) =>
+  request<KnowledgeCategory>("/api/v1/admin/categories", {
+    method: "POST",
+    headers: jsonHeaders(),
+    body: JSON.stringify({ name }),
+  })
+
+export const updateCategory = (categoryId: string, name: string) =>
+  request<KnowledgeCategory>(`/api/v1/admin/categories/${categoryId}`, {
+    method: "PATCH",
+    headers: jsonHeaders(),
+    body: JSON.stringify({ name }),
+  })
+
+export const deleteCategory = (categoryId: string) =>
+  request<{ message: string }>(`/api/v1/admin/categories/${categoryId}`, {
+    method: "DELETE",
+    headers: authHeader(),
+  })
+
+export const getTags = () =>
+  request<ListResponse<KnowledgeTag>>("/api/v1/admin/tags", {
+    method: "GET",
+    headers: authHeader(),
+  })
+
+export const createTag = (name: string) =>
+  request<KnowledgeTag>("/api/v1/admin/tags", {
+    method: "POST",
+    headers: jsonHeaders(),
+    body: JSON.stringify({ name }),
+  })
+
+export const deleteTag = (tagId: string) =>
+  request<{ message: string }>(`/api/v1/admin/tags/${tagId}`, {
+    method: "DELETE",
+    headers: authHeader(),
+  })
+
+/* ---------------------------------- поиск ---------------------------------- */
+
+export const searchKnowledge = (payload: {
+  question: string
+  owner_types?: ("source" | "doc")[]
+  category_ids?: string[]
+  tag_ids?: string[]
+  limit?: number
+}) =>
+  request<ListResponse<KnowledgeSearchHit>>("/api/v1/admin/knowledge/search", {
+    method: "POST",
+    headers: jsonHeaders(),
+    body: JSON.stringify(payload),
+  })
+
+/* -------------------------- запросы, тикеты, метрики ------------------------ */
+
+export const getActiveRequests = (params?: { skip?: number; limit?: number }) =>
+  request<ListResponse<ActiveRequest>>(
+    `/api/v1/admin/requests/active${query({ ...params })}`,
+    { method: "GET", headers: authHeader() },
+  )
+
+export const getJournalRequests = (params?: {
+  status?: string
+  skip?: number
+  limit?: number
+}) =>
+  request<ListResponse<JournalRequest>>(
+    `/api/v1/admin/requests/journal${query({ ...params })}`,
+    { method: "GET", headers: authHeader() },
   )
 
 export const getOperatorQueue = () =>
-  request<{ data: OperatorQueueEntry[]; count: number }>(
-    "/api/v1/admin/operator-queue",
-    {
-      method: "GET",
-      headers: { Authorization: jsonHeaders().Authorization },
-    },
-  )
+  request<ListResponse<SupportTicket>>("/api/v1/admin/operator-queue", {
+    method: "GET",
+    headers: authHeader(),
+  })
+
+export const assignTicket = (ticketId: string, assignedTo?: string | null) =>
+  request<SupportTicket>(`/api/v1/admin/tickets/${ticketId}/assign`, {
+    method: "POST",
+    headers: jsonHeaders(),
+    body: JSON.stringify({ assigned_to: assignedTo ?? null }),
+  })
+
+export const resolveTicket = (ticketId: string, resolution: string) =>
+  request<SupportTicket>(`/api/v1/admin/tickets/${ticketId}/resolve`, {
+    method: "POST",
+    headers: jsonHeaders(),
+    body: JSON.stringify({ resolution }),
+  })
+
+export const reopenTicket = (ticketId: string, reason?: string) =>
+  request<SupportTicket>(`/api/v1/admin/tickets/${ticketId}/reopen`, {
+    method: "POST",
+    headers: jsonHeaders(),
+    body: JSON.stringify({ reason: reason || null }),
+  })
 
 export const getSupportMetrics = () =>
   request<SupportMetrics>("/api/v1/admin/metrics", {
     method: "GET",
-    headers: { Authorization: jsonHeaders().Authorization },
+    headers: authHeader(),
   })

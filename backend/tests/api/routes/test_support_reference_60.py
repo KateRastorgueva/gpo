@@ -8,7 +8,6 @@ from app.core.config import settings
 from app.models import FaqEntryCreate
 from app.services.support_service import RetrievalResult, create_faq_entry
 
-
 FAQ_REFERENCE_20 = [
     "Где смотреть расписание занятий ТУСУР?",
     "Где посмотреть расписание пар ТУСУР?",

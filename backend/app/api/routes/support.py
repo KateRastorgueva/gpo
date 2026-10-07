@@ -1,10 +1,21 @@
 from typing import Any
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, HTTPException, Query
 
 from app.api.deps import CurrentUser, SessionDep
-from app.models import SupportAskRequest, SupportAskResponse, SupportHistoryPublic
-from app.services.support_service import list_support_history, run_support_pipeline
+from app.models import (
+    SupportAskRequest,
+    SupportAskResponse,
+    SupportFeedbackCreate,
+    SupportFeedbackPublic,
+    SupportHistoryPublic,
+)
+from app.services.support_service import (
+    SupportConflictError,
+    create_feedback,
+    list_support_history,
+    run_support_pipeline,
+)
 
 router = APIRouter(prefix="/support", tags=["support"])
 
@@ -31,3 +42,16 @@ def get_support_history(
     )
     return SupportHistoryPublic(data=history, count=len(history))
 
+
+@router.post("/feedback", response_model=SupportFeedbackPublic)
+def submit_support_feedback(
+    *, session: SessionDep, current_user: CurrentUser, payload: SupportFeedbackCreate
+) -> Any:
+    """Отзыв на свой запрос: один отзыв на запрос (решение V7)."""
+    try:
+        return create_feedback(session, user_id=current_user.id, payload=payload)
+    except SupportConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+    except ValueError as exc:
+        # Чужой запрос отвечает так же, как несуществующий
+        raise HTTPException(status_code=404, detail=str(exc))
