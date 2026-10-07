@@ -1,6 +1,16 @@
+"""Сервисный слой обработки обращений технической поддержки.
+
+Модуль реализует маршрут обработки пользовательского вопроса по схеме
+``FAQ -> RAG -> Operator``. В нем находятся функции поиска FAQ-ответов,
+извлечения релевантных фрагментов базы знаний, генерации ответа через LLM,
+эскалации обращения оператору и обслуживания административных сценариев.
+"""
+
 import hashlib
+import math
 import re
 import uuid
+from collections import Counter
 from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -193,6 +203,13 @@ _embedding_model: Any | None = None
 
 @dataclass
 class RetrievalResult:
+    """Результат поиска одного релевантного фрагмента базы знаний.
+
+    Атрибуты содержат идентификаторы источника и фрагмента, человекочитаемое
+    название источника, ссылку на него, текст найденного фрагмента и оценку
+    релевантности.
+    """
+
     source_id: uuid.UUID
     source_title: str
     source_ref: str | None
@@ -202,6 +219,8 @@ class RetrievalResult:
 
 
 def normalize_text(value: str) -> str:
+    """Нормализует строку для сравнения, поиска и вычисления сходства."""
+
     lowered = value.lower().strip()
     lowered = re.sub(r"\s+", " ", lowered)
     lowered = re.sub(r"[^\w\sа-яА-ЯёЁ-]", "", lowered)
@@ -209,17 +228,48 @@ def normalize_text(value: str) -> str:
 
 
 def _token_set(value: str) -> set[str]:
+    """Преобразует нормализованный текст в множество непустых токенов."""
+
     normalized = normalize_text(value)
     if not normalized:
         return set()
     return {token for token in normalized.split(" ") if token}
 
 
+_RU_SUFFIXES = (
+    "иями", "ями", "ами", "ией", "иям", "иях", "его", "ому", "ими", "ыми",
+    "ого", "ему", "ая", "яя", "ое", "ее", "ые", "ие", "ий", "ый", "ой", "ей",
+    "ия", "ие", "ии", "ов", "ев", "ин", "ын", "ах", "ях", "ам", "ям", "ом", "ем",
+    "ы", "и", "а", "я", "о", "е", "у", "ю", "ь",
+)
+
+
+def russian_stem(word: str) -> str:
+    """Возвращает грубую основу русского слова отсечением типовых окончаний."""
+
+    if len(word) <= 3:
+        return word
+    for suffix in _RU_SUFFIXES:
+        if word.endswith(suffix) and len(word) - len(suffix) >= 3:
+            return word[: -len(suffix)]
+    return word
+
+
+def _lexical_tokens(value: str) -> list[str]:
+    """Токены с лёгким русским стеммингом для лексического поиска."""
+
+    return [russian_stem(token) for token in _token_set(value)]
+
+
 def _canonical_faq_token(token: str) -> str:
+    """Возвращает каноническую форму FAQ-токена с учетом словаря синонимов."""
+
     return FAQ_KEYWORD_SYNONYMS.get(token, token)
 
 
 def _faq_keyword_set(value: str) -> set[str]:
+    """Выделяет значимые ключевые слова для intent-oriented FAQ-сравнения."""
+
     tokens = _token_set(value)
     keywords: set[str] = set()
     for token in tokens:
@@ -233,6 +283,8 @@ def _faq_keyword_set(value: str) -> set[str]:
 
 
 def _faq_keyword_similarity(left: str, right: str) -> float:
+    """Вычисляет сходство двух FAQ-фраз по пересечению ключевых слов."""
+
     left_keywords = _faq_keyword_set(left)
     right_keywords = _faq_keyword_set(right)
     if not left_keywords or not right_keywords:
@@ -257,6 +309,8 @@ def _faq_keyword_similarity(left: str, right: str) -> float:
 
 
 def faq_similarity(left: str, right: str) -> float:
+    """Вычисляет итоговую оценку похожести вопроса пользователя и FAQ."""
+
     left_n = normalize_text(left)
     right_n = normalize_text(right)
     if not left_n or not right_n:
@@ -275,6 +329,8 @@ def faq_similarity(left: str, right: str) -> float:
 
 
 def _lexical_similarity(left: str, right: str) -> float:
+    """Считает F1-подобную лексическую близость двух текстов по токенам."""
+
     left_tokens = _token_set(left)
     right_tokens = _token_set(right)
     if not left_tokens or not right_tokens:
@@ -290,16 +346,61 @@ def _lexical_similarity(left: str, right: str) -> float:
     )
 
 
+def _compute_idf(texts: Iterable[str]) -> dict[str, float]:
+    """Считает IDF-веса терминов по коллекции документов."""
+
+    doc_freq: Counter[str] = Counter()
+    doc_count = 0
+    for text in texts:
+        doc_count += 1
+        for token in set(_lexical_tokens(text)):
+            doc_freq[token] += 1
+    return {
+        token: math.log((doc_count + 1) / (count + 1)) + 1.0
+        for token, count in doc_freq.items()
+    }
+
+
+def _tfidf_vector(text: str, idf: dict[str, float]) -> dict[str, float]:
+    """Возвращает TF-IDF вектор текста, нормированный по частоте терминов."""
+
+    term_freq: Counter[str] = Counter(_lexical_tokens(text))
+    total = sum(term_freq.values()) or 1
+    return {
+        token: (count / total) * idf.get(token, 1.0)
+        for token, count in term_freq.items()
+    }
+
+
+def _tfidf_cosine(left: dict[str, float], right: dict[str, float]) -> float:
+    """Косинусное сходство двух разреженных TF-IDF векторов."""
+
+    if not left or not right:
+        return 0.0
+    numerator = sum(weight * right.get(token, 0.0) for token, weight in left.items())
+    left_norm = math.sqrt(sum(weight * weight for weight in left.values()))
+    right_norm = math.sqrt(sum(weight * weight for weight in right.values()))
+    if not left_norm or not right_norm:
+        return 0.0
+    return numerator / (left_norm * right_norm)
+
+
 def _clamp_score(value: float) -> float:
+    """Ограничивает числовую оценку диапазоном от 0.0 до 1.0."""
+
     return max(0.0, min(1.0, value))
 
 
 def is_critical_question(question: str) -> bool:
+    """Проверяет, содержит ли вопрос признаки критичного обращения."""
+
     normalized = normalize_text(question)
     return any(keyword in normalized for keyword in CRITICAL_KEYWORDS)
 
 
 def _get_sentence_transformer() -> Any | None:
+    """Лениво загружает локальную модель SentenceTransformer для embeddings."""
+
     global _embedding_model
     if _embedding_model is not None:
         return _embedding_model
@@ -313,18 +414,36 @@ def _get_sentence_transformer() -> Any | None:
 
 
 def _hashed_embedding(text: str, size: int = 384) -> list[float]:
-    text_bytes = text.encode("utf-8", errors="ignore")
-    digest = hashlib.sha256(text_bytes).digest()
-    output: list[float] = []
-    idx = 0
-    while len(output) < size:
-        byte_val = digest[idx % len(digest)]
-        output.append((byte_val / 127.5) - 1.0)
-        idx += 1
-    return output
+    """Строит резервный embedding через char-n-gram feature hashing.
+
+    Прежний вариант на SHA-256 давал случайные векторы без смысловой близости,
+    из-за чего семантический поиск без sentence-transformers/Google был шумом.
+    Feature hashing по символьным n-граммам сохраняет близость текстов, похожих
+    по словам и их написанию, без внешних моделей.
+    """
+
+    gram_size = 3
+    grams: Counter[str] = Counter()
+    for token in re.findall(r"[a-zа-яё0-9]+", text.lower()):
+        token = f"#{token}#"
+        for index in range(len(token) - gram_size + 1):
+            grams[token[index : index + gram_size]] += 1
+
+    vector = [0.0] * size
+    for gram, count in grams.items():
+        digest = hashlib.md5(gram.encode("utf-8")).digest()
+        bucket = int.from_bytes(digest[:4], "little") % size
+        vector[bucket] += float(count)
+
+    norm = math.sqrt(sum(value * value for value in vector))
+    if norm:
+        vector = [value / norm for value in vector]
+    return vector
 
 
 def _resize_vector(vector: list[float], size: int) -> list[float]:
+    """Приводит embedding-вектор к требуемой размерности."""
+
     if len(vector) == size:
         return vector
     if len(vector) > size:
@@ -333,6 +452,8 @@ def _resize_vector(vector: list[float], size: int) -> list[float]:
 
 
 def _embed_with_google(text: str) -> list[float] | None:
+    """Получает embedding текста через Google API, если ключ настроен."""
+
     if not settings.GOOGLE_API_KEY:
         return None
     embedding_model = settings.GOOGLE_EMBEDDING_MODEL.strip()
@@ -360,6 +481,8 @@ def _embed_with_google(text: str) -> list[float] | None:
 
 
 def embed_text(text: str) -> list[float]:
+    """Создает embedding для одного текста через доступный backend embeddings."""
+
     model = _get_sentence_transformer()
     if model is not None:
         vector = model.encode(text)  # type: ignore[no-untyped-call]
@@ -371,6 +494,8 @@ def embed_text(text: str) -> list[float]:
 
 
 def embed_texts(texts: Iterable[str]) -> list[list[float]]:
+    """Создает embeddings для набора текстов с пакетной обработкой при возможности."""
+
     model = _get_sentence_transformer()
     text_list = list(texts)
     if model is not None and text_list:
@@ -380,6 +505,8 @@ def embed_texts(texts: Iterable[str]) -> list[list[float]]:
 
 
 def _qdrant_base_url() -> str:
+    """Формирует базовый URL Qdrant с учетом настроек host и port."""
+
     host = settings.QDRANT_HOST.strip()
     if host.startswith(("http://", "https://")):
         parsed = urlparse(host)
@@ -390,6 +517,8 @@ def _qdrant_base_url() -> str:
 
 
 def _qdrant_headers() -> dict[str, str]:
+    """Возвращает HTTP-заголовки для запросов к Qdrant."""
+
     headers: dict[str, str] = {}
     if settings.QDRANT_API_KEY:
         headers["api-key"] = settings.QDRANT_API_KEY
@@ -402,6 +531,8 @@ def _qdrant_request(
     payload: dict[str, Any] | None = None,
     allowed_statuses: set[int] | None = None,
 ) -> httpx.Response:
+    """Выполняет HTTP-запрос к Qdrant и проверяет статус ответа."""
+
     url = f"{_qdrant_base_url()}{path}"
     with httpx.Client(timeout=settings.QDRANT_TIMEOUT_SECONDS) as client:
         response = client.request(
@@ -414,6 +545,8 @@ def _qdrant_request(
 
 
 def ensure_qdrant_collection(vector_size: int) -> None:
+    """Создает коллекцию Qdrant для embeddings, если она еще не существует."""
+
     collection_path = f"/collections/{settings.QDRANT_COLLECTION_NAME}"
     response = _qdrant_request("GET", collection_path, allowed_statuses={404})
     if response.status_code != 404:
@@ -426,11 +559,15 @@ def ensure_qdrant_collection(vector_size: int) -> None:
 
 
 def reset_qdrant_collection() -> None:
+    """Удаляет коллекцию Qdrant, игнорируя ее отсутствие."""
+
     collection_path = f"/collections/{settings.QDRANT_COLLECTION_NAME}"
     _qdrant_request("DELETE", collection_path, allowed_statuses={404})
 
 
 def _scroll_qdrant_points(limit: int = 256) -> list[dict[str, Any]]:
+    """Постранично получает payload всех точек из коллекции Qdrant."""
+
     collection_path = f"/collections/{settings.QDRANT_COLLECTION_NAME}/points/scroll"
     points: list[dict[str, Any]] = []
     offset: Any | None = None
@@ -457,6 +594,8 @@ def _scroll_qdrant_points(limit: int = 256) -> list[dict[str, Any]]:
 
 
 def _delete_qdrant_points(point_ids: list[Any]) -> None:
+    """Удаляет из Qdrant точки с указанными идентификаторами."""
+
     if not point_ids:
         return
     _qdrant_request(
@@ -468,6 +607,8 @@ def _delete_qdrant_points(point_ids: list[Any]) -> None:
 
 
 def remove_orphan_vectors(session: Session) -> int:
+    """Удаляет векторы Qdrant без активного источника или связанного chunk."""
+
     points = _scroll_qdrant_points()
     if not points:
         return 0
@@ -496,6 +637,8 @@ def remove_orphan_vectors(session: Session) -> int:
 
 
 def chunk_text(text: str) -> list[str]:
+    """Разбивает текст источника на перекрывающиеся фрагменты для индексации."""
+
     stripped = text.strip()
     if not stripped:
         return []
@@ -513,6 +656,8 @@ def chunk_text(text: str) -> list[str]:
 
 
 def find_faq_match(session: Session, question: str) -> tuple[FaqEntry | None, float]:
+    """Ищет лучший активный FAQ-ответ для вопроса пользователя."""
+
     faqs = session.exec(select(FaqEntry).where(FaqEntry.is_active == True)).all()  # noqa: E712
     if not faqs:
         return None, 0.0
@@ -527,6 +672,8 @@ def find_faq_match(session: Session, question: str) -> tuple[FaqEntry | None, fl
 
 
 def _parse_uuid(value: Any) -> uuid.UUID | None:
+    """Преобразует произвольное значение в UUID или возвращает None."""
+
     try:
         if value is None:
             return None
@@ -536,6 +683,8 @@ def _parse_uuid(value: Any) -> uuid.UUID | None:
 
 
 def _to_source_attributions(results: list[RetrievalResult]) -> list[SourceAttribution]:
+    """Преобразует результаты retrieval в публичные описания источников."""
+
     return [
         SourceAttribution(
             source_id=result.source_id,
@@ -550,6 +699,8 @@ def _to_source_attributions(results: list[RetrievalResult]) -> list[SourceAttrib
 
 
 def _serialize_sources(sources: list[SourceAttribution]) -> list[dict[str, Any]]:
+    """Сериализует источники ответа в JSON-совместимый список словарей."""
+
     serialized: list[dict[str, Any]] = []
     for source in sources:
         serialized.append(
@@ -566,6 +717,8 @@ def _serialize_sources(sources: list[SourceAttribution]) -> list[dict[str, Any]]
 
 
 def retrieve_semantic_chunks(question: str, limit: int | None = None) -> list[RetrievalResult]:
+    """Получает кандидаты базы знаний через семантический поиск Qdrant."""
+
     final_limit = limit or settings.HYBRID_CANDIDATES_LIMIT
     query_vector = embed_text(question)
     ensure_qdrant_collection(len(query_vector))
@@ -602,17 +755,26 @@ def retrieve_semantic_chunks(question: str, limit: int | None = None) -> list[Re
 
 
 def retrieve_lexical_chunks(session: Session, question: str) -> list[RetrievalResult]:
+    """Получает кандидаты базы знаний через взвешенный лексический поиск (TF-IDF)."""
+
     statement = (
         select(KnowledgeChunk, KnowledgeSource)
         .join(KnowledgeSource, KnowledgeChunk.source_id == KnowledgeSource.id)
         .where(KnowledgeSource.is_active == True)  # noqa: E712
     )
     rows = session.exec(statement).all()
-    question_normalized = normalize_text(question)
+    if not rows:
+        return []
+
+    idf = _compute_idf([chunk.content for chunk, _source in rows])
+    query_vector = _tfidf_vector(question, idf)
+    if not query_vector:
+        return []
+
     lexical_results: list[RetrievalResult] = []
     for chunk, source in rows:
-        chunk_score = _lexical_similarity(question_normalized, chunk.content)
-        title_score = _lexical_similarity(question_normalized, source.title)
+        chunk_score = _tfidf_cosine(query_vector, _tfidf_vector(chunk.content, idf))
+        title_score = _tfidf_cosine(query_vector, _tfidf_vector(source.title, idf))
         score = max(chunk_score, title_score)
         if score <= 0:
             continue
@@ -631,6 +793,8 @@ def retrieve_lexical_chunks(session: Session, question: str) -> list[RetrievalRe
 
 
 def _result_key(item: RetrievalResult) -> str:
+    """Формирует стабильный ключ для объединения retrieval-результатов."""
+
     if item.chunk_id is not None:
         return f"chunk:{item.chunk_id}"
     return f"source:{item.source_id}:{hash(item.snippet)}"
@@ -640,6 +804,8 @@ def _merge_hybrid_results(
     semantic_results: list[RetrievalResult],
     lexical_results: list[RetrievalResult],
 ) -> list[RetrievalResult]:
+    """Объединяет семантические и лексические результаты в общий рейтинг."""
+
     semantic_by_key = {_result_key(item): item for item in semantic_results}
     lexical_by_key = {_result_key(item): item for item in lexical_results}
     keys = set(semantic_by_key).union(lexical_by_key)
@@ -683,6 +849,8 @@ def _merge_hybrid_results(
 
 
 def rerank_results(question: str, results: list[RetrievalResult]) -> list[RetrievalResult]:
+    """Повторно ранжирует найденные фрагменты с учетом лексического совпадения."""
+
     if not results:
         return []
     normalized_question = normalize_text(question)
@@ -708,22 +876,66 @@ def rerank_results(question: str, results: list[RetrievalResult]) -> list[Retrie
 
 
 def retrieve_relevant_chunks(*, session: Session, question: str) -> list[RetrievalResult]:
+    """Возвращает итоговый набор релевантных фрагментов для RAG-ответа."""
+
     semantic = retrieve_semantic_chunks(question)
     lexical = retrieve_lexical_chunks(session, question)
     merged = _merge_hybrid_results(semantic, lexical)
     return rerank_results(question, merged)
 
 
+_NEGATION_WORDS = ("не", "нельзя", "нет")
+
+
+def _has_negation(text: str) -> bool:
+    """Проверяет наличие маркеров отрицания в тексте по токенам."""
+
+    for token in _token_set(text):
+        if token in _NEGATION_WORDS:
+            return True
+        if token.startswith(("запрещ", "отмен", "неверн", "отсутств")):
+            return True
+    return False
+
+
 def has_conflicting_sources(results: list[RetrievalResult]) -> bool:
-    if len(results) < 2:
+    """Определяет явный содержательный конфликт между найденными источниками.
+
+    Консервативная эвристика: конфликт фиксируется, только если два
+    высокорейтинговых фрагмента из разных источников говорят об одном и том же
+    (значительное пересечение значимых терминов), но противоположны по
+    полярности (один отрицает, другой утверждает). Близкие оценки согласующихся
+    источников конфликтом не считаются, чтобы не блокировать многокорпусный RAG.
+    """
+
+    strong = [
+        item
+        for item in results
+        if item.score >= settings.RAG_RELEVANT_CHUNK_THRESHOLD
+    ]
+    if len(strong) < 2:
         return False
-    first, second = results[0], results[1]
-    close_scores = abs(first.score - second.score) <= 0.03
-    different_sources = first.source_id != second.source_id
-    return close_scores and different_sources
+
+    first, second = strong[0], strong[1]
+    if first.source_id == second.source_id:
+        return False
+
+    first_terms = set(_lexical_tokens(first.snippet))
+    second_terms = set(_lexical_tokens(second.snippet))
+    if not first_terms or not second_terms:
+        return False
+    overlap = len(first_terms.intersection(second_terms)) / min(
+        len(first_terms), len(second_terms)
+    )
+    if overlap < 0.3:
+        return False
+
+    return _has_negation(first.snippet) != _has_negation(second.snippet)
 
 
 def _build_prompt(question: str, results: list[RetrievalResult]) -> str:
+    """Формирует prompt для LLM на основе вопроса и найденных источников."""
+
     contexts: list[str] = []
     for idx, result in enumerate(results, start=1):
         source_ref = result.source_ref or "без ссылки"
@@ -743,6 +955,8 @@ def _build_prompt(question: str, results: list[RetrievalResult]) -> str:
 
 
 def _generate_with_google(prompt: str) -> str:
+    """Генерирует ответ через Google Generative Language API."""
+
     if not settings.GOOGLE_API_KEY:
         raise RuntimeError("GOOGLE_API_KEY is not configured")
     url = f"{settings.GOOGLE_API_URL}/models/{settings.GOOGLE_MODEL}:generateContent"
@@ -765,6 +979,8 @@ def _generate_with_google(prompt: str) -> str:
 
 
 def _generate_with_ollama(prompt: str) -> str:
+    """Генерирует ответ через локальный или удаленный Ollama API."""
+
     url = f"{settings.OLLAMA_BASE_URL.rstrip('/')}/api/generate"
     payload = {
         "model": settings.OLLAMA_MODEL,
@@ -782,6 +998,8 @@ def _generate_with_ollama(prompt: str) -> str:
 
 
 def generate_answer(question: str, results: list[RetrievalResult]) -> tuple[str, bool]:
+    """Генерирует RAG-ответ и возвращает признак использования fallback."""
+
     prompt = _build_prompt(question, results)
     try:
         return _generate_with_google(prompt), False
@@ -790,6 +1008,8 @@ def generate_answer(question: str, results: list[RetrievalResult]) -> tuple[str,
 
 
 def _create_queue_item(session: Session, request_id: uuid.UUID, reason: str) -> None:
+    """Создает открытую запись в очереди оператора для обращения."""
+
     queue_item = OperatorQueue(request_id=request_id, reason=reason, status="open")
     session.add(queue_item)
 
@@ -810,6 +1030,8 @@ def _record_support_result(
     route_reason: str,
     decision_metrics: DecisionMetrics,
 ) -> SupportAskResponse:
+    """Сохраняет запрос, ответ, источники и при необходимости очередь оператора."""
+
     request = SupportRequest(
         user_id=user_id,
         session_id=session_id,
@@ -854,6 +1076,8 @@ def _record_support_result(
 def run_support_pipeline(
     *, session: Session, user_id: uuid.UUID | None, payload: SupportAskRequest
 ) -> SupportAskResponse:
+    """Выполняет полный pipeline обработки обращения: FAQ, RAG или Operator."""
+
     session_id = payload.session_id or str(uuid.uuid4())
     faq_match, faq_score = find_faq_match(session, payload.question)
     critical = is_critical_question(payload.question)
@@ -1033,6 +1257,8 @@ def run_support_pipeline(
 def list_support_history(
     *, session: Session, user_id: uuid.UUID, session_id: str | None = None, limit: int = 50
 ) -> list[SupportHistoryEntry]:
+    """Возвращает историю обращений пользователя вместе с ответами и источниками."""
+
     statement = select(SupportRequest).where(SupportRequest.user_id == user_id)
     if session_id:
         statement = statement.where(SupportRequest.session_id == session_id)
@@ -1049,9 +1275,25 @@ def list_support_history(
     for answer in answers:
         answer_map[answer.request_id] = answer
 
+    queue_reply_map: dict[uuid.UUID, OperatorReply] = {}
+    queue_items = session.exec(
+        select(OperatorQueue).where(OperatorQueue.request_id.in_(request_ids))
+    ).all()
+    queue_ids = [item.id for item in queue_items]
+    if queue_ids:
+        replies = session.exec(
+            select(OperatorReply).where(OperatorReply.queue_id.in_(queue_ids))
+        ).all()
+        reply_by_queue_id = {reply.queue_id: reply for reply in replies}
+        for queue_item in queue_items:
+            reply = reply_by_queue_id.get(queue_item.id)
+            if reply:
+                queue_reply_map[queue_item.request_id] = reply
+
     history: list[SupportHistoryEntry] = []
     for request in requests:
         answer = answer_map.get(request.id)
+        operator_reply = queue_reply_map.get(request.id)
         sources = []
         if answer and answer.sources_json:
             for item in answer.sources_json:
@@ -1080,12 +1322,16 @@ def list_support_history(
                 fallback_used=request.fallback_used,
                 status=request.status,
                 created_at=request.created_at,
+                operator_reply_text=operator_reply.reply_text if operator_reply else None,
+                operator_reply_created_at=operator_reply.created_at if operator_reply else None,
             )
         )
     return history
 
 
 def create_faq_entry(session: Session, faq_in: FaqEntryCreate) -> FaqEntry:
+    """Создает FAQ-запись и сохраняет нормализованную форму вопроса."""
+
     sanitized_question = _ensure_utf8_text(faq_in.question)
     sanitized_answer = _ensure_utf8_text(faq_in.answer)
     faq = FaqEntry(
@@ -1101,6 +1347,8 @@ def create_faq_entry(session: Session, faq_in: FaqEntryCreate) -> FaqEntry:
 
 
 def update_faq_entry(session: Session, faq: FaqEntry, faq_in: FaqEntryUpdate) -> FaqEntry:
+    """Обновляет FAQ-запись и пересчитывает нормализованный вопрос."""
+
     data = faq_in.model_dump(exclude_unset=True)
     if "question" in data and data["question"]:
         data["question"] = _ensure_utf8_text(data["question"])
@@ -1117,6 +1365,8 @@ def update_faq_entry(session: Session, faq: FaqEntry, faq_in: FaqEntryUpdate) ->
 
 
 def _extract_text_from_pdf(data: bytes) -> str:
+    """Извлекает текст из PDF-байтов с помощью pypdf или простого fallback."""
+
     try:
         from pypdf import PdfReader
     except ImportError as exc:
@@ -1146,6 +1396,8 @@ def _extract_text_from_pdf(data: bytes) -> str:
 
 
 def _extract_text_from_url(url: str) -> str:
+    """Загружает страницу по URL и извлекает из нее человекочитаемый текст."""
+
     with httpx.Client(timeout=settings.QDRANT_TIMEOUT_SECONDS) as client:
         response = client.get(url)
         response.raise_for_status()
@@ -1163,6 +1415,8 @@ def _extract_text_from_url(url: str) -> str:
 
 
 def _decode_utf8_text_bytes(data: bytes) -> str:
+    """Декодирует байты текстового источника как UTF-8 с учетом BOM."""
+
     try:
         return data.decode("utf-8-sig")
     except UnicodeDecodeError as exc:
@@ -1170,6 +1424,8 @@ def _decode_utf8_text_bytes(data: bytes) -> str:
 
 
 def _ensure_utf8_text(value: str) -> str:
+    """Возвращает строку, безопасно приведенную к UTF-8 и очищенную по краям."""
+
     return value.encode("utf-8", errors="replace").decode("utf-8", errors="replace").strip()
 
 
@@ -1180,6 +1436,8 @@ def resolve_source_content(
     source_url: str | None,
     manual_content: str | None,
 ) -> tuple[str, str, str | None]:
+    """Определяет тип источника знаний и возвращает извлеченный текст."""
+
     if manual_content and manual_content.strip():
         source_ref = _ensure_utf8_text(source_url) if source_url else None
         return _ensure_utf8_text(manual_content), "manual", source_ref
@@ -1199,6 +1457,8 @@ def resolve_source_content(
 
 
 def remove_source_vectors(source_id: uuid.UUID) -> None:
+    """Удаляет из Qdrant все векторы, связанные с указанным источником."""
+
     _qdrant_request(
         "POST",
         f"/collections/{settings.QDRANT_COLLECTION_NAME}/points/delete",
@@ -1214,6 +1474,8 @@ def remove_source_vectors(source_id: uuid.UUID) -> None:
 
 
 def _upsert_points(points: list[dict[str, Any]]) -> None:
+    """Записывает или обновляет набор точек в коллекции Qdrant."""
+
     _qdrant_request(
         "PUT",
         f"/collections/{settings.QDRANT_COLLECTION_NAME}/points?wait=true",
@@ -1222,6 +1484,8 @@ def _upsert_points(points: list[dict[str, Any]]) -> None:
 
 
 def index_source(session: Session, source: KnowledgeSource) -> int:
+    """Индексирует источник знаний в базе данных и векторном хранилище."""
+
     source.title = _ensure_utf8_text(source.title)
     source.content = _ensure_utf8_text(source.content)
     if source.source_ref:
@@ -1288,6 +1552,8 @@ def reindex_sources(
     full_rebuild: bool = False,
     purge_orphans: bool = True,
 ) -> tuple[int, int]:
+    """Переиндексирует активные источники и возвращает статистику обработки."""
+
     if full_rebuild:
         source_ids = None
 
@@ -1318,6 +1584,8 @@ def reindex_sources(
 
 
 def list_operator_queue(session: Session) -> list[OperatorQueueEntry]:
+    """Возвращает очередь операторских обращений с данными запросов и ответов."""
+
     queue_items = session.exec(
         select(OperatorQueue).order_by(col(OperatorQueue.created_at).desc())
     ).all()
@@ -1360,6 +1628,8 @@ def reply_to_queue_item(
     reply_text: str,
     operator_id: uuid.UUID,
 ) -> OperatorQueueEntry:
+    """Сохраняет ответ оператора и переводит обращение в resolved-состояние."""
+
     sanitized = _ensure_utf8_text(reply_text)
     existing = session.exec(
         select(OperatorReply).where(OperatorReply.queue_id == queue_item.id)
@@ -1400,6 +1670,8 @@ def reply_to_queue_item(
 
 
 def list_my_queue(session: Session, user_id: uuid.UUID) -> list[MyQueueEntry]:
+    """Возвращает пользовательские обращения, переданные оператору."""
+
     statement = (
         select(SupportRequest)
         .where(SupportRequest.user_id == user_id)
@@ -1446,6 +1718,8 @@ def list_my_queue(session: Session, user_id: uuid.UUID) -> list[MyQueueEntry]:
 
 
 def get_support_metrics(session: Session) -> SupportMetricsPublic:
+    """Рассчитывает агрегированные метрики работы службы поддержки."""
+
     requests = session.exec(select(SupportRequest)).all()
     total = len(requests)
     if total == 0:

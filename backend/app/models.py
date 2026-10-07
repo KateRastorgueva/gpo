@@ -367,6 +367,8 @@ class SupportHistoryEntry(SQLModel):
     fallback_used: bool
     status: str = Field(default="completed", min_length=1, max_length=20)
     created_at: datetime | None = None
+    operator_reply_text: str | None = None
+    operator_reply_created_at: datetime | None = None
 
 
 class SupportHistoryPublic(SQLModel):
