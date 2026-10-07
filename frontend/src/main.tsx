@@ -20,7 +20,9 @@ const LOOPBACK_HOSTS = ["localhost", "127.0.0.1", "[::1]"]
 // со стеком: при открытии через туннель или по IP браузер посетителя ушёл бы на свой
 // localhost, поэтому в этом случае тоже берётся тот же origin.
 const resolveApiBase = (): string => {
-  const configured = (import.meta.env.VITE_API_URL ?? "").trim().replace(/\/+$/, "")
+  const configured = (import.meta.env.VITE_API_URL ?? "")
+    .trim()
+    .replace(/\/+$/, "")
   if (!configured) return ""
   try {
     const { hostname } = new URL(configured)

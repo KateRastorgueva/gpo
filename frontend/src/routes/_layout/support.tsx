@@ -1,16 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { createFileRoute } from "@tanstack/react-router"
-import { useEffect, useRef, useState } from "react"
-
-import { LoadingButton } from "@/components/ui/loading-button"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { StepsTimeline } from "@/components/Support/display"
 import { FeedbackForm } from "@/components/Support/FeedbackForm"
 import { Message } from "@/components/Support/Message"
+import { LoadingButton } from "@/components/ui/loading-button"
 import useCustomToast from "@/hooks/useCustomToast"
-import {
-  askSupport,
-  getSupportHistory,
-} from "@/services/supportApi"
+import { askSupport, getSupportHistory } from "@/services/supportApi"
 
 type Chat = {
   sessionId: string
@@ -50,7 +46,7 @@ const createNewChat = (): Chat => {
 
 const updateChat = (sessionId: string, updates: Partial<Chat>) => {
   const chats = getChats()
-  const index = chats.findIndex(c => c.sessionId === sessionId)
+  const index = chats.findIndex((c) => c.sessionId === sessionId)
   if (index !== -1) {
     chats[index] = { ...chats[index], ...updates }
     saveChats(chats)
@@ -74,21 +70,35 @@ function SupportPage() {
 
   const historyQuery = useQuery({
     queryKey: ["supportHistory", selectedChat?.sessionId],
-    queryFn: () => selectedChat ? getSupportHistory(selectedChat.sessionId) : Promise.resolve({ data: [], count: 0 }),
+    queryFn: () =>
+      selectedChat
+        ? getSupportHistory(selectedChat.sessionId)
+        : Promise.resolve({ data: [], count: 0 }),
     enabled: !!selectedChat,
   })
 
   const askMutation = useMutation({
-    mutationFn: () => askSupport({ question, session_id: selectedChat!.sessionId, channel: "web" }),
+    mutationFn: () =>
+      askSupport({
+        question,
+        session_id: selectedChat!.sessionId,
+        channel: "web",
+      }),
     onSuccess: () => {
       setQuestion("")
       showSuccessToast("Ответ получен")
-      queryClient.invalidateQueries({ queryKey: ["supportHistory", selectedChat!.sessionId] })
+      queryClient.invalidateQueries({
+        queryKey: ["supportHistory", selectedChat!.sessionId],
+      })
       // Update chat title and metadata
       const history = historyQuery.data?.data || []
-      const firstQuestion = history.length === 0 ? question : history[0].question
+      const firstQuestion =
+        history.length === 0 ? question : history[0].question
       updateChat(selectedChat!.sessionId, {
-        title: firstQuestion.length > 50 ? firstQuestion.substring(0, 50) + "..." : firstQuestion,
+        title:
+          firstQuestion.length > 50
+            ? `${firstQuestion.substring(0, 50)}...`
+            : firstQuestion,
         lastMessageAt: new Date().toISOString(),
         messageCount: history.length + 2, // question + answer
       })
@@ -99,13 +109,13 @@ function SupportPage() {
     },
   })
 
-  const scrollToBottom = () => {
+  const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
-  }
+  }, [])
 
   useEffect(() => {
     scrollToBottom()
-  }, [historyQuery.data])
+  }, [scrollToBottom])
 
   const submitQuestion = () => {
     if (!question.trim() || !selectedChat) {
@@ -142,6 +152,7 @@ function SupportPage() {
       <div className="flex flex-col h-full">
         <div className="flex items-center gap-4 p-4 border-b">
           <button
+            type="button"
             onClick={handleBackToList}
             className="text-muted-foreground hover:text-foreground"
           >
@@ -151,7 +162,9 @@ function SupportPage() {
         </div>
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
           {historyQuery.isPending ? (
-            <p className="text-sm text-muted-foreground text-center">Загрузка истории...</p>
+            <p className="text-sm text-muted-foreground text-center">
+              Загрузка истории...
+            </p>
           ) : historyQuery.data?.data.length ? (
             historyQuery.data.data.map((entry) => (
               <div key={entry.request_id}>
@@ -214,6 +227,7 @@ function SupportPage() {
       <div className="flex items-center justify-between p-4 border-b">
         <h1 className="text-2xl font-bold">Техподдержка</h1>
         <button
+          type="button"
           onClick={handleNewChat}
           className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
         >
@@ -223,8 +237,11 @@ function SupportPage() {
       <div className="flex-1 overflow-y-auto">
         {chats.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-center p-8">
-            <p className="text-muted-foreground mb-4">У вас пока нет активных чатов</p>
+            <p className="text-muted-foreground mb-4">
+              У вас пока нет активных чатов
+            </p>
             <button
+              type="button"
               onClick={handleNewChat}
               className="px-6 py-3 bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
             >
@@ -234,10 +251,11 @@ function SupportPage() {
         ) : (
           <div className="p-4 space-y-2">
             {chats.map((chat) => (
-              <div
+              <button
+                type="button"
                 key={chat.sessionId}
                 onClick={() => handleSelectChat(chat)}
-                className="p-4 border rounded-lg cursor-pointer hover:bg-muted/50 transition-colors"
+                className="block w-full text-left p-4 border rounded-lg cursor-pointer hover:bg-muted/50 transition-colors"
               >
                 <div className="flex items-center justify-between">
                   <h3 className="font-medium truncate">{chat.title}</h3>
@@ -248,7 +266,7 @@ function SupportPage() {
                 <p className="text-sm text-muted-foreground mt-1">
                   {chat.messageCount} сообщений
                 </p>
-              </div>
+              </button>
             ))}
           </div>
         )}
@@ -256,5 +274,3 @@ function SupportPage() {
     </div>
   )
 }
-
-

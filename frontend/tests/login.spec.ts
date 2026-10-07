@@ -128,5 +128,7 @@ test("Allows opening /login with invalid token and clears stale auth", async ({
 
   await expect(page).toHaveURL("/login")
   await expect(page.getByRole("button", { name: "Log In" })).toBeVisible()
-  await expect(page.evaluate(() => localStorage.getItem("access_token"))).resolves.toBeNull()
+  await expect(
+    page.evaluate(() => localStorage.getItem("access_token")),
+  ).resolves.toBeNull()
 })

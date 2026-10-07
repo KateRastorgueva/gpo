@@ -21,6 +21,7 @@ def _make_retrieval_results(
     first_score: float,
     second_score: float,
     same_source: bool = True,
+    contradicting: bool = False,
 ) -> list[RetrievalResult]:
     source_id = uuid.uuid4()
     second_source_id = source_id if same_source else uuid.uuid4()
@@ -30,7 +31,11 @@ def _make_retrieval_results(
             source_title="Source A",
             source_ref="https://example.edu/a",
             chunk_id=uuid.uuid4(),
-            snippet="Support desk works on weekdays.",
+            snippet=(
+                "Служба поддержки работает по будням."
+                if contradicting
+                else "Support desk works on weekdays."
+            ),
             score=first_score,
         ),
         RetrievalResult(
@@ -38,7 +43,11 @@ def _make_retrieval_results(
             source_title="Source B",
             source_ref="https://example.edu/b",
             chunk_id=uuid.uuid4(),
-            snippet="Requests are accepted via web portal.",
+            snippet=(
+                "Служба поддержки не работает по будням."
+                if contradicting
+                else "Requests are accepted via web portal."
+            ),
             score=second_score,
         ),
     ]
@@ -195,9 +204,12 @@ def test_support_ask_escalates_on_retrieval_failure(
 def test_support_ask_escalates_when_sources_conflict(
     client: TestClient, normal_user_token_headers: dict[str, str]
 ) -> None:
-    # close scores + different source ids => conflict
+    # different sources, same topic, opposite polarity => conflict
     fake_results = _make_retrieval_results(
-        first_score=0.82, second_score=0.80, same_source=False
+        first_score=0.82,
+        second_score=0.80,
+        same_source=False,
+        contradicting=True,
     )
     with (
         patch("app.services.support_service.find_faq_match", return_value=(None, 0.0)),
