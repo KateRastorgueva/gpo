@@ -3,6 +3,8 @@ import { createFileRoute } from "@tanstack/react-router"
 import { useEffect, useRef, useState } from "react"
 
 import { LoadingButton } from "@/components/ui/loading-button"
+import { StepsTimeline } from "@/components/Support/display"
+import { FeedbackForm } from "@/components/Support/FeedbackForm"
 import { Message } from "@/components/Support/Message"
 import useCustomToast from "@/hooks/useCustomToast"
 import {
@@ -166,6 +168,10 @@ function SupportPage() {
                   sources={entry.sources}
                   fallbackUsed={entry.fallback_used}
                 />
+                {entry.steps.length > 1 ? (
+                  <StepsTimeline steps={entry.steps} />
+                ) : null}
+                <FeedbackForm requestId={entry.request_id} />
               </div>
             ))
           ) : (

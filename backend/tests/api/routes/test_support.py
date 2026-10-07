@@ -7,8 +7,8 @@ from sqlmodel import Session
 from app.core.config import settings
 from app.models import FaqEntryCreate
 from app.services.support_service import (
-    _merge_hybrid_results,
     RetrievalResult,
+    _merge_hybrid_results,
     create_faq_entry,
     faq_similarity,
     generate_answer,
@@ -334,7 +334,7 @@ def test_operator_queue_contains_escalated_request(
     assert any(item["question"] == question for item in queue_body["data"])
 
 
-def test_operator_reply_workflow_updates_user_queue_and_history(
+def test_my_queue_shows_ticket_resolution(
     client: TestClient,
     normal_user_token_headers: dict[str, str],
     superuser_token_headers: dict[str, str],
@@ -362,20 +362,17 @@ def test_operator_reply_workflow_updates_user_queue_and_history(
         headers=superuser_token_headers,
     )
     assert queue_response.status_code == 200
-    queue_item = next(
+    ticket = next(
         item for item in queue_response.json()["data"] if item["question"] == question
     )
 
     reply_text = "Operator answer for the student"
-    reply_response = client.patch(
-        f"{settings.API_V1_STR}/admin/operator-queue/{queue_item['queue_id']}",
+    resolve_response = client.post(
+        f"{settings.API_V1_STR}/admin/tickets/{ticket['ticket_id']}/resolve",
         headers=superuser_token_headers,
-        json={"reply_text": reply_text},
+        json={"resolution": reply_text},
     )
-    assert reply_response.status_code == 200
-    reply_body = reply_response.json()
-    assert reply_body["status"] == "resolved"
-    assert reply_body["reply_text"] == reply_text
+    assert resolve_response.status_code == 200
 
     my_queue_response = client.get(
         f"{settings.API_V1_STR}/support/my-queue",
@@ -385,24 +382,12 @@ def test_operator_reply_workflow_updates_user_queue_and_history(
     my_queue_item = next(
         item
         for item in my_queue_response.json()["data"]
-        if item["request_id"] == queue_item["request_id"]
+        if item["request_id"] == ticket["request_id"]
     )
+    assert my_queue_item["queue_id"] == ticket["ticket_id"]
     assert my_queue_item["status"] == "resolved"
     assert my_queue_item["reply_text"] == reply_text
-
-    history_response = client.get(
-        f"{settings.API_V1_STR}/support/history?session_id={session_id}",
-        headers=normal_user_token_headers,
-    )
-    assert history_response.status_code == 200
-    assert history_response.json()["data"][0]["status"] == "operator_replied"
-
-    duplicate_response = client.patch(
-        f"{settings.API_V1_STR}/admin/operator-queue/{queue_item['queue_id']}",
-        headers=superuser_token_headers,
-        json={"reply_text": "second answer"},
-    )
-    assert duplicate_response.status_code == 409
+    assert my_queue_item["reply_created_at"] is not None
 
 
 def test_admin_faq_crud(

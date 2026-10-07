@@ -8,6 +8,7 @@ import { columns, type UserTableData } from "@/components/Admin/columns"
 import { DataTable } from "@/components/Common/DataTable"
 import PendingUsers from "@/components/Pending/PendingUsers"
 import useAuth from "@/hooks/useAuth"
+import { canManageUsers } from "@/lib/permissions"
 
 function getUsersQueryOptions() {
   return {
@@ -20,7 +21,8 @@ export const Route = createFileRoute("/_layout/admin")({
   component: Admin,
   beforeLoad: async () => {
     const user = await UsersService.readUserMe()
-    if (!user.is_superuser) {
+    // Раздел доступен только с правом user:manage (у админа оно раскрывается через "*")
+    if (!canManageUsers(user)) {
       throw redirect({
         to: "/",
       })

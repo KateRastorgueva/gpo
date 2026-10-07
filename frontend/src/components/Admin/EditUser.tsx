@@ -28,8 +28,16 @@ import {
 } from "@/components/ui/form"
 import { Input } from "@/components/ui/input"
 import { LoadingButton } from "@/components/ui/loading-button"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import useCustomToast from "@/hooks/useCustomToast"
 import { handleError } from "@/utils"
+import { useRoles } from "./useRoles"
 
 const formSchema = z
   .object({
@@ -41,7 +49,7 @@ const formSchema = z
       .optional()
       .or(z.literal("")),
     confirm_password: z.string().optional(),
-    is_superuser: z.boolean().optional(),
+    role_id: z.string().optional(),
     is_active: z.boolean().optional(),
   })
   .refine((data) => !data.password || data.password === data.confirm_password, {
@@ -60,6 +68,7 @@ const EditUser = ({ user, onSuccess }: EditUserProps) => {
   const [isOpen, setIsOpen] = useState(false)
   const queryClient = useQueryClient()
   const { showSuccessToast, showErrorToast } = useCustomToast()
+  const rolesQuery = useRoles()
 
   const form = useForm<FormData>({
     resolver: zodResolver(formSchema),
@@ -68,7 +77,7 @@ const EditUser = ({ user, onSuccess }: EditUserProps) => {
     defaultValues: {
       email: user.email,
       full_name: user.full_name ?? undefined,
-      is_superuser: user.is_superuser,
+      role_id: user.role_id ?? "",
       is_active: user.is_active,
     },
   })
@@ -92,6 +101,10 @@ const EditUser = ({ user, onSuccess }: EditUserProps) => {
     const { confirm_password: _, ...submitData } = data
     if (!submitData.password) {
       delete submitData.password
+    }
+    // Пустой выбор роли не отправляем: иначе роль будет снята
+    if (!submitData.role_id) {
+      delete submitData.role_id
     }
     mutation.mutate(submitData)
   }
@@ -188,16 +201,29 @@ const EditUser = ({ user, onSuccess }: EditUserProps) => {
 
               <FormField
                 control={form.control}
-                name="is_superuser"
+                name="role_id"
                 render={({ field }) => (
-                  <FormItem className="flex items-center gap-3 space-y-0">
-                    <FormControl>
-                      <Checkbox
-                        checked={field.value}
-                        onCheckedChange={field.onChange}
-                      />
-                    </FormControl>
-                    <FormLabel className="font-normal">Is superuser?</FormLabel>
+                  <FormItem>
+                    <FormLabel>Role</FormLabel>
+                    <Select
+                      value={field.value ?? ""}
+                      onValueChange={field.onChange}
+                      disabled={rolesQuery.isPending}
+                    >
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Role is not set" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {(rolesQuery.data?.data ?? []).map((role) => (
+                          <SelectItem key={role.id} value={role.id}>
+                            {role.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
                   </FormItem>
                 )}
               />

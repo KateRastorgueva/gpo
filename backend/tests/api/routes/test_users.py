@@ -519,3 +519,113 @@ def test_delete_user_without_privileges(
     )
     assert r.status_code == 403
     assert r.json()["detail"] == "The user doesn't have enough privileges"
+
+# --- Роли (RBAC): управление доступом через роль, а не через флаг is_superuser ---
+
+
+def _roles(client: TestClient, headers: dict[str, str]) -> dict[str, dict]:
+    response = client.get(f"{settings.API_V1_STR}/users/roles", headers=headers)
+    assert response.status_code == 200
+    return {item["name"]: item for item in response.json()["data"]}
+
+
+def test_read_roles_requires_permission(
+    client: TestClient,
+    superuser_token_headers: dict[str, str],
+    normal_user_token_headers: dict[str, str],
+) -> None:
+    assert (
+        client.get(
+            f"{settings.API_V1_STR}/users/roles", headers=normal_user_token_headers
+        ).status_code
+        == 403
+    )
+
+    roles = _roles(client, superuser_token_headers)
+    assert {"admin", "operator", "user"} <= set(roles)
+    assert "*" in roles["admin"]["permissions"]
+
+
+def test_create_user_with_role(
+    client: TestClient, superuser_token_headers: dict[str, str]
+) -> None:
+    admin_role = _roles(client, superuser_token_headers)["admin"]
+    email = random_email()
+    password = random_lower_string()
+
+    response = client.post(
+        f"{settings.API_V1_STR}/users/",
+        headers=superuser_token_headers,
+        json={"email": email, "password": password, "role_id": admin_role["id"]},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["role_name"] == "admin"
+    assert body["role_id"] == admin_role["id"]
+    # is_superuser остаётся производным полем ответа
+    assert body["is_superuser"] is True
+
+
+def test_create_user_with_unknown_role(
+    client: TestClient, superuser_token_headers: dict[str, str]
+) -> None:
+    response = client.post(
+        f"{settings.API_V1_STR}/users/",
+        headers=superuser_token_headers,
+        json={
+            "email": random_email(),
+            "password": random_lower_string(),
+            "role_id": str(uuid.uuid4()),
+        },
+    )
+    assert response.status_code == 400
+
+
+def test_update_user_role(
+    client: TestClient, superuser_token_headers: dict[str, str]
+) -> None:
+    roles = _roles(client, superuser_token_headers)
+    email = random_email()
+    password = random_lower_string()
+
+    created = client.post(
+        f"{settings.API_V1_STR}/users/",
+        headers=superuser_token_headers,
+        json={"email": email, "password": password},
+    )
+    assert created.status_code == 200
+    user_id = created.json()["id"]
+    # По умолчанию роль обычного пользователя
+    assert created.json()["role_name"] == "user"
+    assert created.json()["is_superuser"] is False
+
+    updated = client.patch(
+        f"{settings.API_V1_STR}/users/{user_id}",
+        headers=superuser_token_headers,
+        json={"role_id": roles["operator"]["id"]},
+    )
+    assert updated.status_code == 200
+    assert updated.json()["role_name"] == "operator"
+
+    listed = client.get(
+        f"{settings.API_V1_STR}/users/{user_id}", headers=superuser_token_headers
+    )
+    assert listed.json()["role_name"] == "operator"
+
+def test_read_user_me_exposes_permissions(
+    client: TestClient,
+    superuser_token_headers: dict[str, str],
+    normal_user_token_headers: dict[str, str],
+) -> None:
+    """UI решает по правам, что показывать: они должны приходить в /users/me."""
+    admin = client.get(
+        f"{settings.API_V1_STR}/users/me", headers=superuser_token_headers
+    ).json()
+    assert admin["role_name"] == "admin"
+    assert "*" in admin["permissions"]
+
+    plain = client.get(
+        f"{settings.API_V1_STR}/users/me", headers=normal_user_token_headers
+    ).json()
+    assert plain["role_name"] == "user"
+    assert plain["permissions"] == []

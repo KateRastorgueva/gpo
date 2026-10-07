@@ -142,6 +142,9 @@ class Settings(BaseSettings):
     URL_FETCH_TIMEOUT_SECONDS: int = 20
     URL_FETCH_USER_AGENT: str = "KSUP-2501-ingest/1.0"
 
+    # Ретенция архива знаний: сколько последних версий хранить на источник (риск R4 плана).
+    KNOWLEDGE_ARCHIVE_MAX_VERSIONS: int = 20
+
     def _check_default_secret(self, var_name: str, value: str | None) -> None:
         if value == "changethis":
             message = (

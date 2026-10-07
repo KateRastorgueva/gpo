@@ -12,7 +12,8 @@ def _row(title: str, content: str):
         id=uuid.uuid4(), title=title, source_ref=None, is_active=True
     )
     chunk = SimpleNamespace(id=uuid.uuid4(), content=content)
-    return chunk, source
+    # Строка выборки по обоим корпусам: (чанк, источник БЗ, документ)
+    return chunk, source, None
 
 
 class _Session:

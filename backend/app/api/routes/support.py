@@ -1,15 +1,19 @@
 from typing import Any
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, HTTPException, Query
 
 from app.api.deps import CurrentUser, SessionDep
 from app.models import (
     MyQueuePublic,
     SupportAskRequest,
     SupportAskResponse,
+    SupportFeedbackCreate,
+    SupportFeedbackPublic,
     SupportHistoryPublic,
 )
 from app.services.support_service import (
+    SupportConflictError,
+    create_feedback,
     list_my_queue,
     list_support_history,
     run_support_pipeline,
@@ -46,3 +50,16 @@ def get_my_queue(*, session: SessionDep, current_user: CurrentUser) -> Any:
     items = list_my_queue(session, current_user.id)
     return MyQueuePublic(data=items, count=len(items))
 
+
+@router.post("/feedback", response_model=SupportFeedbackPublic)
+def submit_support_feedback(
+    *, session: SessionDep, current_user: CurrentUser, payload: SupportFeedbackCreate
+) -> Any:
+    """Отзыв на свой запрос: один отзыв на запрос (решение V7)."""
+    try:
+        return create_feedback(session, user_id=current_user.id, payload=payload)
+    except SupportConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+    except ValueError as exc:
+        # Чужой запрос отвечает так же, как несуществующий
+        raise HTTPException(status_code=404, detail=str(exc))

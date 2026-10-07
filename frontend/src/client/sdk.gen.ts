@@ -3,7 +3,679 @@
 import type { CancelablePromise } from './core/CancelablePromise';
 import { OpenAPI } from './core/OpenAPI';
 import { request as __request } from './core/request';
-import type { ItemsReadItemsData, ItemsReadItemsResponse, ItemsCreateItemData, ItemsCreateItemResponse, ItemsReadItemData, ItemsReadItemResponse, ItemsUpdateItemData, ItemsUpdateItemResponse, ItemsDeleteItemData, ItemsDeleteItemResponse, LoginLoginAccessTokenData, LoginLoginAccessTokenResponse, LoginTestTokenResponse, LoginRecoverPasswordData, LoginRecoverPasswordResponse, LoginResetPasswordData, LoginResetPasswordResponse, LoginRecoverPasswordHtmlContentData, LoginRecoverPasswordHtmlContentResponse, PrivateCreateUserData, PrivateCreateUserResponse, UsersReadUsersData, UsersReadUsersResponse, UsersCreateUserData, UsersCreateUserResponse, UsersReadUserMeResponse, UsersDeleteUserMeResponse, UsersUpdateUserMeData, UsersUpdateUserMeResponse, UsersUpdatePasswordMeData, UsersUpdatePasswordMeResponse, UsersRegisterUserData, UsersRegisterUserResponse, UsersReadUserByIdData, UsersReadUserByIdResponse, UsersUpdateUserData, UsersUpdateUserResponse, UsersDeleteUserData, UsersDeleteUserResponse, UtilsTestEmailData, UtilsTestEmailResponse, UtilsHealthCheckResponse } from './types.gen';
+import type { AdminSupportListFaqData, AdminSupportListFaqResponse, AdminSupportCreateFaqData, AdminSupportCreateFaqResponse, AdminSupportUpdateFaqData, AdminSupportUpdateFaqResponse, AdminSupportDeleteFaqData, AdminSupportDeleteFaqResponse, AdminSupportListSourcesData, AdminSupportListSourcesResponse, AdminSupportUploadSourceData, AdminSupportUploadSourceResponse, AdminSupportUploadSourceJsonData, AdminSupportUploadSourceJsonResponse, AdminSupportDeleteSourceData, AdminSupportDeleteSourceResponse, AdminSupportUpdateKnowledgeSourceData, AdminSupportUpdateKnowledgeSourceResponse, AdminSupportReindexKnowledgeSourcesData, AdminSupportReindexKnowledgeSourcesResponse, AdminSupportGetOperatorQueueResponse, AdminSupportAssignSupportTicketData, AdminSupportAssignSupportTicketResponse, AdminSupportResolveSupportTicketData, AdminSupportResolveSupportTicketResponse, AdminSupportReopenSupportTicketData, AdminSupportReopenSupportTicketResponse, AdminSupportGetAdminSupportMetricsResponse, AdminSupportGetActiveRequestsData, AdminSupportGetActiveRequestsResponse, AdminSupportGetJournalRequestsData, AdminSupportGetJournalRequestsResponse, AdminSupportDeactivateKnowledgeSourceData, AdminSupportDeactivateKnowledgeSourceResponse, AdminSupportListSourceArchiveData, AdminSupportListSourceArchiveResponse, AdminSupportListKnowledgeCategoriesData, AdminSupportListKnowledgeCategoriesResponse, AdminSupportCreateKnowledgeCategoryData, AdminSupportCreateKnowledgeCategoryResponse, AdminSupportUpdateKnowledgeCategoryData, AdminSupportUpdateKnowledgeCategoryResponse, AdminSupportDeleteKnowledgeCategoryData, AdminSupportDeleteKnowledgeCategoryResponse, AdminSupportListKnowledgeTagsData, AdminSupportListKnowledgeTagsResponse, AdminSupportCreateKnowledgeTagData, AdminSupportCreateKnowledgeTagResponse, AdminSupportDeleteKnowledgeTagData, AdminSupportDeleteKnowledgeTagResponse, AdminSupportSearchKnowledgeBaseData, AdminSupportSearchKnowledgeBaseResponse, AdminSupportListKnowledgeDocsData, AdminSupportListKnowledgeDocsResponse, AdminSupportCreateKnowledgeDocData, AdminSupportCreateKnowledgeDocResponse, AdminSupportUpdateKnowledgeDocData, AdminSupportUpdateKnowledgeDocResponse, AdminSupportDeleteKnowledgeDocData, AdminSupportDeleteKnowledgeDocResponse, AdminSupportReindexKnowledgeDocsData, AdminSupportReindexKnowledgeDocsResponse, ItemsReadItemsData, ItemsReadItemsResponse, ItemsCreateItemData, ItemsCreateItemResponse, ItemsReadItemData, ItemsReadItemResponse, ItemsUpdateItemData, ItemsUpdateItemResponse, ItemsDeleteItemData, ItemsDeleteItemResponse, LoginLoginAccessTokenData, LoginLoginAccessTokenResponse, LoginTestTokenResponse, LoginRecoverPasswordData, LoginRecoverPasswordResponse, LoginResetPasswordData, LoginResetPasswordResponse, LoginRecoverPasswordHtmlContentData, LoginRecoverPasswordHtmlContentResponse, PrivateCreateUserData, PrivateCreateUserResponse, SupportAskSupportQuestionData, SupportAskSupportQuestionResponse, SupportGetSupportHistoryData, SupportGetSupportHistoryResponse, SupportSubmitSupportFeedbackData, SupportSubmitSupportFeedbackResponse, UsersReadRolesResponse, UsersReadUsersData, UsersReadUsersResponse, UsersCreateUserData, UsersCreateUserResponse, UsersReadUserMeResponse, UsersDeleteUserMeResponse, UsersUpdateUserMeData, UsersUpdateUserMeResponse, UsersUpdatePasswordMeData, UsersUpdatePasswordMeResponse, UsersRegisterUserData, UsersRegisterUserResponse, UsersReadUserByIdData, UsersReadUserByIdResponse, UsersUpdateUserData, UsersUpdateUserResponse, UsersDeleteUserData, UsersDeleteUserResponse, UtilsTestEmailData, UtilsTestEmailResponse, UtilsHealthCheckResponse } from './types.gen';
+
+export class AdminSupportService {
+    /**
+     * List Faq
+     * FAQ-фасад над базой знаний: записи с `source_type='faq'`.
+     * @param data The data for the request.
+     * @param data.skip
+     * @param data.limit
+     * @returns FaqEntriesPublic Successful Response
+     * @throws ApiError
+     */
+    public static listFaq(data: AdminSupportListFaqData = {}): CancelablePromise<AdminSupportListFaqResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/admin/faq',
+            query: {
+                skip: data.skip,
+                limit: data.limit
+            },
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * Create Faq
+     * @param data The data for the request.
+     * @param data.requestBody
+     * @returns FaqEntryPublic Successful Response
+     * @throws ApiError
+     */
+    public static createFaq(data: AdminSupportCreateFaqData): CancelablePromise<AdminSupportCreateFaqResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/admin/faq',
+            body: data.requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * Update Faq
+     * @param data The data for the request.
+     * @param data.faqId
+     * @param data.requestBody
+     * @returns FaqEntryPublic Successful Response
+     * @throws ApiError
+     */
+    public static updateFaq(data: AdminSupportUpdateFaqData): CancelablePromise<AdminSupportUpdateFaqResponse> {
+        return __request(OpenAPI, {
+            method: 'PATCH',
+            url: '/api/v1/admin/faq/{faq_id}',
+            path: {
+                faq_id: data.faqId
+            },
+            body: data.requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * Delete Faq
+     * @param data The data for the request.
+     * @param data.faqId
+     * @returns Message Successful Response
+     * @throws ApiError
+     */
+    public static deleteFaq(data: AdminSupportDeleteFaqData): CancelablePromise<AdminSupportDeleteFaqResponse> {
+        return __request(OpenAPI, {
+            method: 'DELETE',
+            url: '/api/v1/admin/faq/{faq_id}',
+            path: {
+                faq_id: data.faqId
+            },
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * List Sources
+     * @param data The data for the request.
+     * @param data.skip
+     * @param data.limit
+     * @returns KnowledgeSourcesPublic Successful Response
+     * @throws ApiError
+     */
+    public static listSources(data: AdminSupportListSourcesData = {}): CancelablePromise<AdminSupportListSourcesResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/admin/sources',
+            query: {
+                skip: data.skip,
+                limit: data.limit
+            },
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * Upload Source
+     * @param data The data for the request.
+     * @param data.formData
+     * @returns KnowledgeSourcePublic Successful Response
+     * @throws ApiError
+     */
+    public static uploadSource(data: AdminSupportUploadSourceData = {}): CancelablePromise<AdminSupportUploadSourceResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/admin/sources/upload',
+            formData: data.formData,
+            mediaType: 'multipart/form-data',
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * Upload Source Json
+     * @param data The data for the request.
+     * @param data.requestBody
+     * @returns KnowledgeSourcePublic Successful Response
+     * @throws ApiError
+     */
+    public static uploadSourceJson(data: AdminSupportUploadSourceJsonData): CancelablePromise<AdminSupportUploadSourceJsonResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/admin/sources/upload-json',
+            body: data.requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * Delete Source
+     * @param data The data for the request.
+     * @param data.sourceId
+     * @returns Message Successful Response
+     * @throws ApiError
+     */
+    public static deleteSource(data: AdminSupportDeleteSourceData): CancelablePromise<AdminSupportDeleteSourceResponse> {
+        return __request(OpenAPI, {
+            method: 'DELETE',
+            url: '/api/v1/admin/sources/{source_id}',
+            path: {
+                source_id: data.sourceId
+            },
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * Update Knowledge Source
+     * Обновить метаданные источника: заголовок, категорию, активность, набор тэгов.
+     *
+     * `tags=[]` очищает набор, отсутствие поля `tags` — не трогает его.
+     * Перед изменением сохраняется снапшот предыдущей версии в архив.
+     * @param data The data for the request.
+     * @param data.sourceId
+     * @param data.requestBody
+     * @returns KnowledgeSourcePublic Successful Response
+     * @throws ApiError
+     */
+    public static updateKnowledgeSource(data: AdminSupportUpdateKnowledgeSourceData): CancelablePromise<AdminSupportUpdateKnowledgeSourceResponse> {
+        return __request(OpenAPI, {
+            method: 'PATCH',
+            url: '/api/v1/admin/sources/{source_id}',
+            path: {
+                source_id: data.sourceId
+            },
+            body: data.requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * Reindex Knowledge Sources
+     * @param data The data for the request.
+     * @param data.requestBody
+     * @returns ReindexResponse Successful Response
+     * @throws ApiError
+     */
+    public static reindexKnowledgeSources(data: AdminSupportReindexKnowledgeSourcesData = {}): CancelablePromise<AdminSupportReindexKnowledgeSourcesResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/admin/sources/reindex',
+            body: data.requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * Get Operator Queue
+     * Тикеты поддержки (включая решённые — их можно переоткрыть).
+     * @returns SupportTicketsPublic Successful Response
+     * @throws ApiError
+     */
+    public static getOperatorQueue(): CancelablePromise<AdminSupportGetOperatorQueueResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/admin/operator-queue'
+        });
+    }
+    
+    /**
+     * Assign Support Ticket
+     * @param data The data for the request.
+     * @param data.ticketId
+     * @param data.requestBody
+     * @returns SupportTicketPublic Successful Response
+     * @throws ApiError
+     */
+    public static assignSupportTicket(data: AdminSupportAssignSupportTicketData): CancelablePromise<AdminSupportAssignSupportTicketResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/admin/tickets/{ticket_id}/assign',
+            path: {
+                ticket_id: data.ticketId
+            },
+            body: data.requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * Resolve Support Ticket
+     * Ответ оператора: решение уходит в журнал шагом `human`, запрос выходит из очереди.
+     * @param data The data for the request.
+     * @param data.ticketId
+     * @param data.requestBody
+     * @returns SupportTicketPublic Successful Response
+     * @throws ApiError
+     */
+    public static resolveSupportTicket(data: AdminSupportResolveSupportTicketData): CancelablePromise<AdminSupportResolveSupportTicketResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/admin/tickets/{ticket_id}/resolve',
+            path: {
+                ticket_id: data.ticketId
+            },
+            body: data.requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * Reopen Support Ticket
+     * Переоткрытие: создаётся новый тикет, запрос возвращается в очередь.
+     * @param data The data for the request.
+     * @param data.ticketId
+     * @param data.requestBody
+     * @returns SupportTicketPublic Successful Response
+     * @throws ApiError
+     */
+    public static reopenSupportTicket(data: AdminSupportReopenSupportTicketData): CancelablePromise<AdminSupportReopenSupportTicketResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/admin/tickets/{ticket_id}/reopen',
+            path: {
+                ticket_id: data.ticketId
+            },
+            body: data.requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * Get Admin Support Metrics
+     * @returns SupportMetricsPublic Successful Response
+     * @throws ApiError
+     */
+    public static getAdminSupportMetrics(): CancelablePromise<AdminSupportGetAdminSupportMetricsResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/admin/metrics'
+        });
+    }
+    
+    /**
+     * Get Active Requests
+     * Запросы, которые сейчас висят в очереди (горячая таблица active_request).
+     * @param data The data for the request.
+     * @param data.skip
+     * @param data.limit
+     * @returns ActiveRequestsPublic Successful Response
+     * @throws ApiError
+     */
+    public static getActiveRequests(data: AdminSupportGetActiveRequestsData = {}): CancelablePromise<AdminSupportGetActiveRequestsResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/admin/requests/active',
+            query: {
+                skip: data.skip,
+                limit: data.limit
+            },
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * Get Journal Requests
+     * Журнал запросов: все запросы, включая активные (источник правды).
+     * @param data The data for the request.
+     * @param data.status
+     * @param data.skip
+     * @param data.limit
+     * @returns JournalRequestsPublic Successful Response
+     * @throws ApiError
+     */
+    public static getJournalRequests(data: AdminSupportGetJournalRequestsData = {}): CancelablePromise<AdminSupportGetJournalRequestsResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/admin/requests/journal',
+            query: {
+                status: data.status,
+                skip: data.skip,
+                limit: data.limit
+            },
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * Deactivate Knowledge Source
+     * Мягкое удаление источника: он пропадает из поиска, история версий сохраняется.
+     *
+     * Жёсткое удаление (`DELETE /admin/sources/{id}`) по решению V6 уничтожает и архив.
+     * @param data The data for the request.
+     * @param data.sourceId
+     * @returns KnowledgeSourcePublic Successful Response
+     * @throws ApiError
+     */
+    public static deactivateKnowledgeSource(data: AdminSupportDeactivateKnowledgeSourceData): CancelablePromise<AdminSupportDeactivateKnowledgeSourceResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/admin/sources/{source_id}/deactivate',
+            path: {
+                source_id: data.sourceId
+            },
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * List Source Archive
+     * История версий знания, свежие сверху.
+     * @param data The data for the request.
+     * @param data.sourceId
+     * @returns KnowledgeArchiveListPublic Successful Response
+     * @throws ApiError
+     */
+    public static listSourceArchive(data: AdminSupportListSourceArchiveData): CancelablePromise<AdminSupportListSourceArchiveResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/admin/sources/{source_id}/archive',
+            path: {
+                source_id: data.sourceId
+            },
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * List Knowledge Categories
+     * @param data The data for the request.
+     * @param data.skip
+     * @param data.limit
+     * @returns KnowledgeCategoriesPublic Successful Response
+     * @throws ApiError
+     */
+    public static listKnowledgeCategories(data: AdminSupportListKnowledgeCategoriesData = {}): CancelablePromise<AdminSupportListKnowledgeCategoriesResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/admin/categories',
+            query: {
+                skip: data.skip,
+                limit: data.limit
+            },
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * Create Knowledge Category
+     * @param data The data for the request.
+     * @param data.requestBody
+     * @returns KnowledgeCategoryPublic Successful Response
+     * @throws ApiError
+     */
+    public static createKnowledgeCategory(data: AdminSupportCreateKnowledgeCategoryData): CancelablePromise<AdminSupportCreateKnowledgeCategoryResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/admin/categories',
+            body: data.requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * Update Knowledge Category
+     * @param data The data for the request.
+     * @param data.categoryId
+     * @param data.requestBody
+     * @returns KnowledgeCategoryPublic Successful Response
+     * @throws ApiError
+     */
+    public static updateKnowledgeCategory(data: AdminSupportUpdateKnowledgeCategoryData): CancelablePromise<AdminSupportUpdateKnowledgeCategoryResponse> {
+        return __request(OpenAPI, {
+            method: 'PATCH',
+            url: '/api/v1/admin/categories/{category_id}',
+            path: {
+                category_id: data.categoryId
+            },
+            body: data.requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * Delete Knowledge Category
+     * Удалить категорию. Источники остаются без категории (ON DELETE SET NULL).
+     * @param data The data for the request.
+     * @param data.categoryId
+     * @returns Message Successful Response
+     * @throws ApiError
+     */
+    public static deleteKnowledgeCategory(data: AdminSupportDeleteKnowledgeCategoryData): CancelablePromise<AdminSupportDeleteKnowledgeCategoryResponse> {
+        return __request(OpenAPI, {
+            method: 'DELETE',
+            url: '/api/v1/admin/categories/{category_id}',
+            path: {
+                category_id: data.categoryId
+            },
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * List Knowledge Tags
+     * @param data The data for the request.
+     * @param data.skip
+     * @param data.limit
+     * @returns TagsPublic Successful Response
+     * @throws ApiError
+     */
+    public static listKnowledgeTags(data: AdminSupportListKnowledgeTagsData = {}): CancelablePromise<AdminSupportListKnowledgeTagsResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/admin/tags',
+            query: {
+                skip: data.skip,
+                limit: data.limit
+            },
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * Create Knowledge Tag
+     * @param data The data for the request.
+     * @param data.requestBody
+     * @returns TagPublic Successful Response
+     * @throws ApiError
+     */
+    public static createKnowledgeTag(data: AdminSupportCreateKnowledgeTagData): CancelablePromise<AdminSupportCreateKnowledgeTagResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/admin/tags',
+            body: data.requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * Delete Knowledge Tag
+     * @param data The data for the request.
+     * @param data.tagId
+     * @returns Message Successful Response
+     * @throws ApiError
+     */
+    public static deleteKnowledgeTag(data: AdminSupportDeleteKnowledgeTagData): CancelablePromise<AdminSupportDeleteKnowledgeTagResponse> {
+        return __request(OpenAPI, {
+            method: 'DELETE',
+            url: '/api/v1/admin/tags/{tag_id}',
+            path: {
+                tag_id: data.tagId
+            },
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * Search Knowledge Base
+     * Поиск по базе знаний с фильтрами по корпусу, категории и тэгам (решение D4).
+     * @param data The data for the request.
+     * @param data.requestBody
+     * @returns KnowledgeSearchPublic Successful Response
+     * @throws ApiError
+     */
+    public static searchKnowledgeBase(data: AdminSupportSearchKnowledgeBaseData): CancelablePromise<AdminSupportSearchKnowledgeBaseResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/admin/knowledge/search',
+            body: data.requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * List Knowledge Docs
+     * @param data The data for the request.
+     * @param data.skip
+     * @param data.limit
+     * @returns KnowledgeDocsPublic Successful Response
+     * @throws ApiError
+     */
+    public static listKnowledgeDocs(data: AdminSupportListKnowledgeDocsData = {}): CancelablePromise<AdminSupportListKnowledgeDocsResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/admin/docs',
+            query: {
+                skip: data.skip,
+                limit: data.limit
+            },
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * Create Knowledge Doc
+     * Создать документ и сразу попытаться его проиндексировать (отдельный корпус, V4).
+     * @param data The data for the request.
+     * @param data.requestBody
+     * @returns KnowledgeDocPublic Successful Response
+     * @throws ApiError
+     */
+    public static createKnowledgeDoc(data: AdminSupportCreateKnowledgeDocData): CancelablePromise<AdminSupportCreateKnowledgeDocResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/admin/docs',
+            body: data.requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * Update Knowledge Doc
+     * @param data The data for the request.
+     * @param data.docId
+     * @param data.requestBody
+     * @returns KnowledgeDocPublic Successful Response
+     * @throws ApiError
+     */
+    public static updateKnowledgeDoc(data: AdminSupportUpdateKnowledgeDocData): CancelablePromise<AdminSupportUpdateKnowledgeDocResponse> {
+        return __request(OpenAPI, {
+            method: 'PATCH',
+            url: '/api/v1/admin/docs/{doc_id}',
+            path: {
+                doc_id: data.docId
+            },
+            body: data.requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * Delete Knowledge Doc
+     * @param data The data for the request.
+     * @param data.docId
+     * @returns Message Successful Response
+     * @throws ApiError
+     */
+    public static deleteKnowledgeDoc(data: AdminSupportDeleteKnowledgeDocData): CancelablePromise<AdminSupportDeleteKnowledgeDocResponse> {
+        return __request(OpenAPI, {
+            method: 'DELETE',
+            url: '/api/v1/admin/docs/{doc_id}',
+            path: {
+                doc_id: data.docId
+            },
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * Reindex Knowledge Docs
+     * Переиндексация корпуса документов (источники не затрагиваются).
+     * @param data The data for the request.
+     * @param data.requestBody
+     * @returns ReindexResponse Successful Response
+     * @throws ApiError
+     */
+    public static reindexKnowledgeDocs(data: AdminSupportReindexKnowledgeDocsData = {}): CancelablePromise<AdminSupportReindexKnowledgeDocsResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/admin/docs/reindex',
+            body: data.requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+}
 
 export class ItemsService {
     /**
@@ -235,7 +907,83 @@ export class PrivateService {
     }
 }
 
+export class SupportService {
+    /**
+     * Ask Support Question
+     * @param data The data for the request.
+     * @param data.requestBody
+     * @returns SupportAskResponse Successful Response
+     * @throws ApiError
+     */
+    public static askSupportQuestion(data: SupportAskSupportQuestionData): CancelablePromise<SupportAskSupportQuestionResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/support/ask',
+            body: data.requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * Get Support History
+     * @param data The data for the request.
+     * @param data.sessionId
+     * @param data.limit
+     * @returns SupportHistoryPublic Successful Response
+     * @throws ApiError
+     */
+    public static getSupportHistory(data: SupportGetSupportHistoryData = {}): CancelablePromise<SupportGetSupportHistoryResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/support/history',
+            query: {
+                session_id: data.sessionId,
+                limit: data.limit
+            },
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * Submit Support Feedback
+     * Отзыв на свой запрос: один отзыв на запрос (решение V7).
+     * @param data The data for the request.
+     * @param data.requestBody
+     * @returns SupportFeedbackPublic Successful Response
+     * @throws ApiError
+     */
+    public static submitSupportFeedback(data: SupportSubmitSupportFeedbackData): CancelablePromise<SupportSubmitSupportFeedbackResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/support/feedback',
+            body: data.requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+}
+
 export class UsersService {
+    /**
+     * Read Roles
+     * Список ролей для выбора в админке (права определяются ролью, не флагом).
+     * @returns RolesPublic Successful Response
+     * @throws ApiError
+     */
+    public static readRoles(): CancelablePromise<UsersReadRolesResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/users/roles'
+        });
+    }
+    
     /**
      * Read Users
      * Retrieve users.

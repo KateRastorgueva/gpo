@@ -3,13 +3,48 @@ from typing import Any
 
 from sqlmodel import Session, select
 
+from app.core.permissions import DEFAULT_ROLE_NAME
 from app.core.security import get_password_hash, verify_password
-from app.models import Item, ItemCreate, User, UserCreate, UserUpdate
+from app.models import Item, ItemCreate, Role, User, UserCreate, UserUpdate
+
+
+def get_role_by_name(*, session: Session, name: str) -> Role | None:
+    statement = select(Role).where(Role.name == name)
+    return session.exec(statement).first()
+
+
+def get_default_role(session: Session) -> Role:
+    """Роль по умолчанию для новых пользователей.
+
+    Роли создаются миграцией `c5a9e3d1b746_roles_and_permissions`, поэтому отсутствие
+    роли означает, что схема не догнана до head.
+    """
+    role = get_role_by_name(session=session, name=DEFAULT_ROLE_NAME)
+    if role is None:
+        raise RuntimeError(
+            f"Default role {DEFAULT_ROLE_NAME!r} is missing: "
+            "run `alembic upgrade head` to seed roles before creating users."
+        )
+    return role
+
+
+def assign_role(*, session: Session, user: User, role: Role) -> User:
+    user.role_id = role.id
+    session.add(user)
+    session.commit()
+    session.refresh(user)
+    return user
 
 
 def create_user(*, session: Session, user_create: UserCreate) -> User:
+    # Роль из запроса важнее роли по умолчанию; существование проверяет роутер.
+    role_id = user_create.role_id or get_default_role(session).id
     db_obj = User.model_validate(
-        user_create, update={"hashed_password": get_password_hash(user_create.password)}
+        user_create,
+        update={
+            "hashed_password": get_password_hash(user_create.password),
+            "role_id": role_id,
+        },
     )
     session.add(db_obj)
     session.commit()

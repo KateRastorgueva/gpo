@@ -22,13 +22,24 @@
 Ключевые endpoint-ы поддержки:
 
 - `POST /api/v1/support/ask`
-- `GET /api/v1/support/history`
-- `GET/POST/PATCH/DELETE /api/v1/admin/faq`
-- `GET/POST/DELETE /api/v1/admin/sources`
-- `POST /api/v1/admin/sources/upload-json`
+- `GET /api/v1/support/history` (поле `steps` — шаги обработки)
+- `POST /api/v1/support/feedback`
+- `GET/POST/PATCH/DELETE /api/v1/admin/faq` (фасад над базой знаний)
+- `GET/POST /api/v1/admin/sources`
+- `PATCH/DELETE /api/v1/admin/sources/{id}`
+- `POST /api/v1/admin/sources/{id}/deactivate` (мягкое удаление)
+- `GET /api/v1/admin/sources/{id}/archive` (история версий)
+- `POST /api/v1/admin/sources/upload`, `POST /api/v1/admin/sources/upload-json`
 - `POST /api/v1/admin/sources/reindex`
+- `GET/POST/PATCH/DELETE /api/v1/admin/categories`
+- `GET/POST/DELETE /api/v1/admin/tags`
+- `GET/POST /api/v1/admin/docs`, `PATCH/DELETE /api/v1/admin/docs/{id}`, `POST /api/v1/admin/docs/reindex`
+- `POST /api/v1/admin/knowledge/search` (фильтры: корпус, категория, тэги)
+- `GET /api/v1/admin/requests/active`, `GET /api/v1/admin/requests/journal`
 - `GET /api/v1/admin/operator-queue`
+- `POST /api/v1/admin/tickets/{id}/assign`, `/resolve`, `/reopen`
 - `GET /api/v1/admin/metrics`
+- `GET /api/v1/users/roles` (справочник ролей для админки)
 
 ## 3. Локальные сервисы Docker
 

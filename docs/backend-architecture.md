@@ -34,7 +34,32 @@ Support-поток (`FAQ -> RAG -> Operator`) сейчас концентрир�
 - `backend/app/api/routes/support.py`
 - `backend/app/api/routes/admin_support.py`
 
-## 4. Как читать код новичку
+## 4. Права доступа
+
+- Каталог прав и матрица ролей: `backend/app/core/permissions.py`.
+- Проверка в роутерах: `Depends(require_permission(...))` из `backend/app/api/deps.py`
+  (например `knowledge:read`, `knowledge:write`, `taxonomy:write`, `ticket:read`,
+  `ticket:resolve`, `metrics:read`, `user:manage`).
+- Роли: `admin` (wildcard `*`), `operator`, `user`; сидируются миграцией
+  `c5a9e3d1b746_roles_and_permissions`.
+- `is_superuser` в БД больше нет (миграция `a1e9c4f72b58`): это производное поле API
+  (wildcard у роли), оставленное для совместимости фронтенда.
+
+## 5. Модель данных поддержки
+
+- `request_journal` — все запросы (источник правды) + `active_request` — горячая очередь.
+  Строки между ними не переносятся: постановка = INSERT, завершение = DELETE.
+- `answer_journal` — шаги обработки запроса (1:N): `faq`, `rag`, `operator`, `human`.
+- `knowledge_source`/`knowledge_doc`/`knowledge_chunk` — база знаний: FAQ (`source_type='faq'`),
+  документы (независимый корпус) и общие чанки (`source_id` xor `doc_id`).
+- `knowledge_category`, `tag`, `knowledge_tag`, `doc_tag` — таксономия.
+- `knowledge_archive` — снапшоты предыдущих версий знания.
+- `support_ticket` — тикеты с назначением, решением и переоткрытием (новый тикет).
+- `support_feedback` — отзывы (один на запрос).
+
+План и статус внедрения: `../docs/db-schema-implementation-plan.md`.
+
+## 6. Как читать код новичку
 
 1. Начать с route-файла нужного endpoint.
 2. Найти вызов service-функции.
