@@ -13,7 +13,30 @@ import { Toaster } from "./components/ui/sonner"
 import "./index.css"
 import { routeTree } from "./routeTree.gen"
 
-OpenAPI.BASE = import.meta.env.VITE_API_URL
+const LOOPBACK_HOSTS = ["localhost", "127.0.0.1", "[::1]"]
+
+// Адрес API. Пустой VITE_API_URL — тот же origin: /api проксирует сервер фронтенда
+// (nginx или dev-сервер Vite). Loopback-адрес, вшитый при сборке, верен только на машине
+// со стеком: при открытии через туннель или по IP браузер посетителя ушёл бы на свой
+// localhost, поэтому в этом случае тоже берётся тот же origin.
+const resolveApiBase = (): string => {
+  const configured = (import.meta.env.VITE_API_URL ?? "").trim().replace(/\/+$/, "")
+  if (!configured) return ""
+  try {
+    const { hostname } = new URL(configured)
+    if (
+      LOOPBACK_HOSTS.includes(hostname) &&
+      !LOOPBACK_HOSTS.includes(window.location.hostname)
+    ) {
+      return ""
+    }
+  } catch {
+    // Относительный адрес (например, "/backend") используем как есть
+  }
+  return configured
+}
+
+OpenAPI.BASE = resolveApiBase()
 OpenAPI.TOKEN = async () => {
   return localStorage.getItem("access_token") || ""
 }
