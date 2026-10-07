@@ -275,10 +275,50 @@ def _token_set(value: str) -> set[str]:
 
 
 _RU_SUFFIXES = (
-    "иями", "ями", "ами", "ией", "иям", "иях", "его", "ому", "ими", "ыми",
-    "ого", "ему", "ая", "яя", "ое", "ее", "ые", "ие", "ий", "ый", "ой", "ей",
-    "ия", "ие", "ии", "ов", "ев", "ин", "ын", "ах", "ях", "ам", "ям", "ом", "ем",
-    "ы", "и", "а", "я", "о", "е", "у", "ю", "ь",
+    "иями",
+    "ями",
+    "ами",
+    "ией",
+    "иям",
+    "иях",
+    "его",
+    "ому",
+    "ими",
+    "ыми",
+    "ого",
+    "ему",
+    "ая",
+    "яя",
+    "ое",
+    "ее",
+    "ые",
+    "ие",
+    "ий",
+    "ый",
+    "ой",
+    "ей",
+    "ия",
+    "ие",
+    "ии",
+    "ов",
+    "ев",
+    "ин",
+    "ын",
+    "ах",
+    "ях",
+    "ам",
+    "ям",
+    "ом",
+    "ем",
+    "ы",
+    "и",
+    "а",
+    "я",
+    "о",
+    "е",
+    "у",
+    "ю",
+    "ь",
 )
 
 
@@ -379,7 +419,9 @@ def _lexical_similarity(left: str, right: str) -> float:
     precision = intersection / len(right_tokens)
     recall = intersection / len(left_tokens)
     return round(
-        (2 * precision * recall) / (precision + recall) if (precision + recall) else 0.0,
+        (2 * precision * recall) / (precision + recall)
+        if (precision + recall)
+        else 0.0,
         4,
     )
 
@@ -443,7 +485,9 @@ def _get_sentence_transformer() -> Any | None:
     if _embedding_model is not None:
         return _embedding_model
     try:
-        from sentence_transformers import SentenceTransformer
+        from sentence_transformers import (
+            SentenceTransformer,  # type: ignore[import-not-found]
+        )
 
         _embedding_model = SentenceTransformer(settings.EMBEDDING_MODEL_NAME)
         return _embedding_model
@@ -636,9 +680,15 @@ def ensure_qdrant_collection(vector_size: int) -> None:
     response = _qdrant_request("GET", collection_path, allowed_statuses={404})
     if response.status_code != 404:
         vectors_config = (
-            response.json().get("result", {}).get("config", {}).get("params", {}).get("vectors", {})
+            response.json()
+            .get("result", {})
+            .get("config", {})
+            .get("params", {})
+            .get("vectors", {})
         )
-        existing_size = vectors_config.get("size") if isinstance(vectors_config, dict) else None
+        existing_size = (
+            vectors_config.get("size") if isinstance(vectors_config, dict) else None
+        )
         if existing_size is not None and existing_size != vector_size:
             raise RuntimeError(
                 f"Qdrant collection has vector size {existing_size}, current embedding "
@@ -1100,7 +1150,9 @@ def _merge_hybrid_results(
             weighted_sum += settings.HYBRID_LEXICAL_WEIGHT * lex_score_raw
             active_weight += settings.HYBRID_LEXICAL_WEIGHT
 
-        combined = _clamp_score(weighted_sum / active_weight) if active_weight > 0 else 0.0
+        combined = (
+            _clamp_score(weighted_sum / active_weight) if active_weight > 0 else 0.0
+        )
         merged.append(
             RetrievalResult(
                 source_id=base.source_id,
@@ -1116,7 +1168,9 @@ def _merge_hybrid_results(
     return merged[: settings.HYBRID_CANDIDATES_LIMIT]
 
 
-def rerank_results(question: str, results: list[RetrievalResult]) -> list[RetrievalResult]:
+def rerank_results(
+    question: str, results: list[RetrievalResult]
+) -> list[RetrievalResult]:
     """Повторно ранжирует найденные фрагменты с учетом лексического совпадения."""
 
     if not results:
@@ -1157,7 +1211,9 @@ def _bm25_tokens(value: str) -> list[str]:
     return [
         russian_stem(token)
         for token in _token_set(value)
-        if len(token) > 1 and token not in FAQ_STOPWORDS and token not in RAG_EXTRA_STOPWORDS
+        if len(token) > 1
+        and token not in FAQ_STOPWORDS
+        and token not in RAG_EXTRA_STOPWORDS
     ]
 
 
@@ -1183,7 +1239,10 @@ def retrieve_lexical_bm25(
     if not rows or not query_terms:
         return [], {}
 
-    docs = [Counter(_bm25_tokens(f"{title} {chunk.content}")) for chunk, _id, title, _ref in rows]
+    docs = [
+        Counter(_bm25_tokens(f"{title} {chunk.content}"))
+        for chunk, _id, title, _ref in rows
+    ]
     total_docs = len(docs)
     avg_len = sum(sum(doc.values()) for doc in docs) / total_docs or 1.0
     doc_freq: Counter[str] = Counter()
@@ -1195,9 +1254,13 @@ def retrieve_lexical_bm25(
         return math.log(1 + (total_docs - n + 0.5) / (n + 0.5))
 
     unknown_idf = math.log(1 + total_docs)
-    total_mass = sum(idf(t) if doc_freq.get(t) else unknown_idf for t in query_terms) or 1.0
+    total_mass = (
+        sum(idf(t) if doc_freq.get(t) else unknown_idf for t in query_terms) or 1.0
+    )
 
-    scored: list[tuple[float, float, tuple[KnowledgeChunk, uuid.UUID, str, str | None]]] = []
+    scored: list[
+        tuple[float, float, tuple[KnowledgeChunk, uuid.UUID, str, str | None]]
+    ] = []
     for row, doc in zip(rows, docs, strict=True):
         length = sum(doc.values())
         bm25 = 0.0
@@ -1208,7 +1271,12 @@ def retrieve_lexical_bm25(
                 continue
             weight = idf(term)
             matched_mass += weight
-            bm25 += weight * freq * (BM25_K1 + 1) / (freq + BM25_K1 * (1 - BM25_B + BM25_B * length / avg_len))
+            bm25 += (
+                weight
+                * freq
+                * (BM25_K1 + 1)
+                / (freq + BM25_K1 * (1 - BM25_B + BM25_B * length / avg_len))
+            )
         if bm25 > 0:
             scored.append((bm25, matched_mass / total_mass, row))
     scored.sort(key=lambda item: item[0], reverse=True)
@@ -1248,12 +1316,19 @@ def _rrf_merge(
             key = _result_key(item)
             rrf[key] = rrf.get(key, 0.0) + 1.0 / (RRF_K + rank + 1)
             items.setdefault(key, item)
-    blended = {_result_key(i): i.score for i in _merge_hybrid_results(semantic_results, lexical_results)}
+    blended = {
+        _result_key(i): i.score
+        for i in _merge_hybrid_results(semantic_results, lexical_results)
+    }
     hashed = get_embedding_backend() == "hashed"
     merged: list[RetrievalResult] = []
     for key in sorted(rrf, key=lambda k: rrf[k], reverse=True):
         base = items[key]
-        score = coverage.get(base.chunk_id, 0.0) if hashed and base.chunk_id else blended.get(key, base.score)
+        score = (
+            coverage.get(base.chunk_id, 0.0)
+            if hashed and base.chunk_id
+            else blended.get(key, base.score)
+        )
         merged.append(
             RetrievalResult(
                 source_id=base.source_id,
@@ -1782,7 +1857,11 @@ def _sources_from_json(items: list[dict[str, Any]] | None) -> list[SourceAttribu
 
 
 def list_support_history(
-    *, session: Session, user_id: uuid.UUID, session_id: str | None = None, limit: int = 50
+    *,
+    session: Session,
+    user_id: uuid.UUID,
+    session_id: str | None = None,
+    limit: int = 50,
 ) -> list[SupportHistoryEntry]:
     """Возвращает историю обращений пользователя вместе с ответами и источниками."""
 
@@ -1960,7 +2039,9 @@ def _extract_text_from_html(html: bytes, content_type: str | None = None) -> str
         from_encoding = content_type.lower().split("charset=")[-1].split(";")[0].strip()
     # BeautifulSoup сам определяет кодировку по meta или содержимому, если ее нет в заголовке.
     soup = BeautifulSoup(html, "html.parser", from_encoding=from_encoding)
-    for tag in soup(["script", "style", "noscript", "nav", "header", "footer", "aside", "form"]):
+    for tag in soup(
+        ["script", "style", "noscript", "nav", "header", "footer", "aside", "form"]
+    ):
         tag.decompose()
     root = soup.find("main") or soup.find("article") or soup.body or soup
     return _ensure_utf8_text(root.get_text(separator="\n", strip=True))
@@ -2002,7 +2083,11 @@ def _ensure_utf8_text(value: str) -> str:
     """
 
     value = value.replace("\x00", "")
-    return value.encode("utf-8", errors="replace").decode("utf-8", errors="replace").strip()
+    return (
+        value.encode("utf-8", errors="replace")
+        .decode("utf-8", errors="replace")
+        .strip()
+    )
 
 
 def resolve_source_content(
@@ -2032,7 +2117,9 @@ def resolve_source_content(
     if lower_name.endswith(".txt") or lower_name.endswith(".md"):
         text = _decode_utf8_text_bytes(file_bytes)
         return _ensure_utf8_text(text), "txt", _ensure_utf8_text(filename)
-    raise ValueError("Unsupported file type. Use pdf/txt/md/html or URL/manual content.")
+    raise ValueError(
+        "Unsupported file type. Use pdf/txt/md/html or URL/manual content."
+    )
 
 
 def remove_source_vectors(source_id: uuid.UUID) -> None:
@@ -2423,7 +2510,9 @@ def list_source_tags(
     return result
 
 
-def list_doc_tags(session: Session, doc_ids: list[uuid.UUID]) -> dict[uuid.UUID, list[str]]:
+def list_doc_tags(
+    session: Session, doc_ids: list[uuid.UUID]
+) -> dict[uuid.UUID, list[str]]:
     """Тэги документов одним запросом (без N+1)."""
     if not doc_ids:
         return {}
@@ -2447,9 +2536,7 @@ def _source_tag_ids(session: Session, source_id: uuid.UUID) -> list[str]:
 
 
 def _doc_tag_ids(session: Session, doc_id: uuid.UUID) -> list[str]:
-    rows = session.exec(
-        select(DocTag.tag_id).where(col(DocTag.doc_id) == doc_id)
-    ).all()
+    rows = session.exec(select(DocTag.tag_id).where(col(DocTag.doc_id) == doc_id)).all()
     return [str(tag_id) for tag_id in rows]
 
 
@@ -2485,9 +2572,7 @@ def _replace_source_tags(
         delete_links=lambda: session.exec(
             delete(KnowledgeTag).where(col(KnowledgeTag.knowledge_id) == source.id)
         ),
-        make_link=lambda tag_id: KnowledgeTag(
-            knowledge_id=source.id, tag_id=tag_id
-        ),
+        make_link=lambda tag_id: KnowledgeTag(knowledge_id=source.id, tag_id=tag_id),
     )
 
 
@@ -2601,7 +2686,9 @@ def _prune_archive(session: Session, knowledge_id: uuid.UUID) -> int:
     ).all()
     stale = list(versions)[keep:]
     if stale:
-        session.exec(delete(KnowledgeArchive).where(col(KnowledgeArchive.id).in_(stale)))
+        session.exec(
+            delete(KnowledgeArchive).where(col(KnowledgeArchive.id).in_(stale))
+        )
     return len(stale)
 
 
@@ -2683,7 +2770,10 @@ def update_source_metadata(
         updates["is_active"] = data["is_active"]
     if "category_id" in data:
         category_id = data["category_id"]
-        if category_id is not None and session.get(KnowledgeCategory, category_id) is None:
+        if (
+            category_id is not None
+            and session.get(KnowledgeCategory, category_id) is None
+        ):
             raise ValueError("Knowledge category not found")
         updates["category_id"] = category_id
     source.sqlmodel_update(updates)
@@ -3152,7 +3242,9 @@ def get_support_metrics(session: Session) -> SupportMetricsPublic:
     answers = session.exec(select(SupportAnswer)).all()
     answer_count = len(answers)
     empty_sources_count = sum(
-        1 for answer in answers if not answer.sources_json or len(answer.sources_json) == 0
+        1
+        for answer in answers
+        if not answer.sources_json or len(answer.sources_json) == 0
     )
     empty_sources_share = (empty_sources_count / answer_count) if answer_count else 0.0
 
