@@ -485,8 +485,8 @@ def _get_sentence_transformer() -> Any | None:
     if _embedding_model is not None:
         return _embedding_model
     try:
-        from sentence_transformers import (
-            SentenceTransformer,  # type: ignore[import-not-found]
+        from sentence_transformers import (  # type: ignore[import-not-found]
+            SentenceTransformer,
         )
 
         _embedding_model = SentenceTransformer(settings.EMBEDDING_MODEL_NAME)
