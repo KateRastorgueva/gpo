@@ -56,9 +56,13 @@ def _make_retrieval_results(
 def _assert_decision_metrics_shape(body: dict) -> None:
     assert "decision_metrics" in body
     metrics = body["decision_metrics"]
-    assert {"top_score", "relevant_chunks", "faq_score", "conflict", "critical"}.issubset(
-        metrics.keys()
-    )
+    assert {
+        "top_score",
+        "relevant_chunks",
+        "faq_score",
+        "conflict",
+        "critical",
+    }.issubset(metrics.keys())
 
 
 def test_support_ask_uses_faq(
@@ -478,7 +482,9 @@ def test_merge_hybrid_results_preserves_semantic_only_score() -> None:
         )
     ]
 
-    merged = _merge_hybrid_results(semantic_results=semantic_results, lexical_results=[])
+    merged = _merge_hybrid_results(
+        semantic_results=semantic_results, lexical_results=[]
+    )
 
     assert len(merged) == 1
     assert abs(merged[0].score - semantic_results[0].score) < 1e-9
