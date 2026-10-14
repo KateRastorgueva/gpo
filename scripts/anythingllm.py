@@ -4,6 +4,7 @@
 Ключ берётся из ANYTHINGLLM_API_KEY (окружение или .env), значение не печатается.
 
 Примеры:
+    python scripts/anythingllm.py reset
     python scripts/anythingllm.py upload "tusur docs" --max-pages 200
     python scripts/anythingllm.py eval --out result.json
 """
@@ -122,6 +123,14 @@ def ask(c: httpx.Client, question: str) -> dict:  # type: ignore[type-arg]
     }
 
 
+def cmd_reset(_args: argparse.Namespace) -> None:
+    # Нужен после смены модели эмбеддингов: старые векторы несовместимы.
+    c = client()
+    c.delete(f"/workspace/{WORKSPACE}")
+    ensure_workspace(c)
+    print(f"workspace {WORKSPACE} пересоздан")
+
+
 def cmd_eval(args: argparse.Namespace) -> None:
     c = client()
     rows = []
@@ -159,6 +168,9 @@ def main() -> None:
     p.add_argument("folder")
     p.add_argument("--max-pages", type=int, default=0)
     p.set_defaults(fn=cmd_upload)
+
+    p = sub.add_parser("reset")
+    p.set_defaults(fn=cmd_reset)
 
     p = sub.add_parser("eval")
     p.add_argument("--out")
