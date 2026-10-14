@@ -108,6 +108,9 @@ services:
       args:
         - VITE_API_URL=http://127.0.0.1:8000
         - NODE_ENV=development
+    volumes:
+      # /api проксируется в backend: фронтенд работает с того же origin (туннель, доступ по IP)
+      - ./frontend/nginx-backend-proxy.conf:/etc/nginx/extra-conf.d/backend-not-found.conf:ro
 
   playwright:
     build:

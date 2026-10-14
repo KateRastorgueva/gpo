@@ -1,6 +1,6 @@
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent } from "@/components/ui/card"
-import { type SourceAttribution } from "@/services/supportApi"
+import type { SourceAttribution } from "@/services/supportApi"
 
 interface MessageProps {
   type: "user" | "bot"
@@ -100,7 +100,8 @@ export function Message({
           )}
           {decisionMetrics && (
             <p className="text-xs text-muted-foreground mb-2">
-              decision: top_score={decisionMetrics.top_score.toFixed(2)}, relevant_chunks=
+              decision: top_score={decisionMetrics.top_score.toFixed(2)},
+              relevant_chunks=
               {decisionMetrics.relevant_chunks}, faq_score=
               {decisionMetrics.faq_score.toFixed(2)}, conflict=
               {String(decisionMetrics.conflict)}, critical=
@@ -122,9 +123,14 @@ export function Message({
 function SourceList({ sources }: { sources: SourceAttribution[] }) {
   return (
     <div className="grid gap-2 mt-2">
-      <p className="text-xs font-medium uppercase text-muted-foreground">Источники</p>
+      <p className="text-xs font-medium uppercase text-muted-foreground">
+        Источники
+      </p>
       {sources.map((source) => (
-        <div key={`${source.source_id}-${source.chunk_id || "none"}`} className="rounded border p-2 text-xs">
+        <div
+          key={`${source.source_id}-${source.chunk_id || "none"}`}
+          className="rounded border p-2 text-xs"
+        >
           <p className="font-medium">{source.source_title}</p>
           {source.source_ref ? (
             <a
