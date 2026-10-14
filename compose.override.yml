@@ -156,6 +156,8 @@ services:
       - EMBEDDING_ENGINE=native
       - EMBEDDING_MODEL_PREF=MintplexLabs/multilingual-e5-small
       - VECTOR_DB=lancedb
+      # OCR сканов: по умолчанию eng, русский текст превращается в мусор.
+      - TARGET_OCR_LANG=rus,eng
       - DISABLE_TELEMETRY=true
     volumes:
       - anythingllm-storage:/app/server/storage
