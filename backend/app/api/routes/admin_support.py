@@ -190,8 +190,22 @@ def delete_faq(*, session: SessionDep, faq_id: uuid.UUID) -> Any:
     dependencies=[Depends(require_permission(KNOWLEDGE_READ))],
     response_model=KnowledgeSourcesPublic,
 )
-def list_sources(session: SessionDep, skip: int = 0, limit: int = 100) -> Any:
-    data, count = list_sources_with_taxonomy(session, skip=skip, limit=limit)
+def list_sources(
+    session: SessionDep,
+    skip: int = 0,
+    limit: int = 100,
+    search: str | None = None,
+    source_type: str | None = None,
+    exclude_type: str | None = None,
+) -> Any:
+    data, count = list_sources_with_taxonomy(
+        session,
+        skip=skip,
+        limit=limit,
+        search=search,
+        source_type=source_type,
+        exclude_type=exclude_type,
+    )
     return KnowledgeSourcesPublic(data=data, count=count)
 
 

@@ -110,7 +110,7 @@ function AdminSupportPage() {
   }
 
   return (
-    <div className="mx-auto grid w-full max-w-6xl gap-6">
+    <div className="mx-auto grid w-full min-w-0 max-w-6xl grid-cols-1 gap-6">
       <div>
         <h1 className="text-2xl font-semibold">Администрирование поддержки</h1>
         <p className="text-sm text-muted-foreground">
@@ -122,7 +122,7 @@ function AdminSupportPage() {
       <Tabs
         value={activeTab}
         onValueChange={setSelectedTab}
-        className="grid gap-4"
+        className="grid min-w-0 grid-cols-1 gap-4"
       >
         <TabsList className="flex h-auto w-full flex-wrap justify-start gap-1">
           {availableTabs.map((tab) => (
@@ -132,7 +132,7 @@ function AdminSupportPage() {
           ))}
         </TabsList>
         {availableTabs.map((tab) => (
-          <TabsContent key={tab.value} value={tab.value}>
+          <TabsContent key={tab.value} value={tab.value} className="min-w-0">
             {tab.render()}
           </TabsContent>
         ))}

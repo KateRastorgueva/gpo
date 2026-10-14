@@ -332,11 +332,19 @@ export const deleteFaqEntry = (faqId: string) =>
 
 /* -------------------------------- источники -------------------------------- */
 
-export const getKnowledgeSources = () =>
-  request<ListResponse<KnowledgeSource>>("/api/v1/admin/sources", {
-    method: "GET",
-    headers: authHeader(),
-  })
+export const getKnowledgeSources = (
+  params: {
+    skip?: number
+    limit?: number
+    search?: string
+    source_type?: string
+    exclude_type?: string
+  } = {},
+) =>
+  request<ListResponse<KnowledgeSource>>(
+    `/api/v1/admin/sources${query(params)}`,
+    { method: "GET", headers: authHeader() },
+  )
 
 export const uploadKnowledgeSource = (payload: {
   title?: string

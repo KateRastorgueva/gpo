@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { useState } from "react"
+import { Search } from "lucide-react"
+import { useMemo, useState } from "react"
 
 import { EmptyState, StatusBadge } from "@/components/Support/display"
 import { Button } from "@/components/ui/button"
@@ -17,6 +18,8 @@ import {
   updateFaqEntry,
 } from "@/services/supportApi"
 
+const PAGE_SIZE = 30
+
 export function FaqPanel() {
   const { showErrorToast, showSuccessToast } = useCustomToast()
   const { has } = usePermissions()
@@ -25,6 +28,8 @@ export function FaqPanel() {
   const queryClient = useQueryClient()
   const [question, setQuestion] = useState("")
   const [answer, setAnswer] = useState("")
+  const [search, setSearch] = useState("")
+  const [page, setPage] = useState(0)
 
   const faqQuery = useQuery({
     queryKey: ["adminSupportFaq"],
@@ -72,7 +77,19 @@ export function FaqPanel() {
     onError: (error: Error) => showErrorToast(error.message),
   })
 
-  const entries = faqQuery.data?.data ?? []
+  const allEntries = faqQuery.data?.data ?? []
+  // Поиск по вопросу и ответу на клиенте: записей сотни, они уже загружены.
+  const filtered = useMemo(() => {
+    const needle = search.trim().toLowerCase()
+    if (!needle) return allEntries
+    return allEntries.filter(
+      (entry) =>
+        entry.question.toLowerCase().includes(needle) ||
+        entry.answer.toLowerCase().includes(needle),
+    )
+  }, [allEntries, search])
+  const pageCount = Math.ceil(filtered.length / PAGE_SIZE)
+  const entries = filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)
 
   return (
     <Card>
@@ -88,7 +105,11 @@ export function FaqPanel() {
           фильтровать по категориям и тэгам на вкладке «База знаний».
         </p>
         {canWrite ? (
-          <div className="grid gap-2">
+          <details className="rounded-md border">
+            <summary className="cursor-pointer px-3 py-2 text-sm font-medium">
+              Добавить запись
+            </summary>
+          <div className="grid gap-2 p-3 pt-0">
             <Input
               value={question}
               onChange={(event) => setQuestion(event.target.value)}
@@ -110,57 +131,95 @@ export function FaqPanel() {
               </LoadingButton>
             </div>
           </div>
+          </details>
         ) : null}
+
+        <div className="relative">
+          <Search className="absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
+          <Input
+            value={search}
+            onChange={(event) => {
+              setSearch(event.target.value)
+              setPage(0)
+            }}
+            placeholder="Поиск по вопросу или ответу"
+            className="pl-8"
+          />
+        </div>
 
         {faqQuery.isPending ? (
           <p className="text-sm text-muted-foreground">Загрузка...</p>
         ) : entries.length === 0 ? (
-          <EmptyState text="Записей нет — добавьте первую пару вопрос/ответ." />
+          <EmptyState text="Ничего не найдено." />
         ) : (
-          <div className="grid gap-2">
+          <div className="grid gap-1">
             {entries.map((entry) => (
-              <div
-                key={entry.id}
-                className="flex flex-wrap items-start justify-between gap-3 rounded-md border p-3"
-              >
-                <div className="grid gap-1">
-                  <p className="text-sm font-medium">{entry.question}</p>
-                  <p className="text-sm text-muted-foreground">
+              <details key={entry.id} className="group rounded-md border">
+                <summary className="flex cursor-pointer items-center gap-2 px-3 py-2">
+                  <span className="min-w-0 flex-1 truncate text-sm font-medium">
+                    {entry.question}
+                  </span>
+                  {entry.is_active ? null : (
+                    <StatusBadge status="deleted" />
+                  )}
+                </summary>
+                <div className="grid gap-2 border-t px-3 py-2">
+                  <p className="whitespace-pre-wrap text-sm text-muted-foreground">
                     {entry.answer}
                   </p>
-                  <StatusBadge
-                    status={entry.is_active ? "indexed" : "deleted"}
-                  />
+                  {canWrite ? (
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={toggleMutation.isPending}
+                        onClick={() =>
+                          toggleMutation.mutate({
+                            id: entry.id,
+                            isActive: !entry.is_active,
+                          })
+                        }
+                      >
+                        {entry.is_active ? "Скрыть" : "Опубликовать"}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        disabled={deleteMutation.isPending}
+                        onClick={() => deleteMutation.mutate(entry.id)}
+                      >
+                        Удалить
+                      </Button>
+                    </div>
+                  ) : null}
                 </div>
-                {canWrite ? (
-                  <div className="flex gap-2">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      disabled={toggleMutation.isPending}
-                      onClick={() =>
-                        toggleMutation.mutate({
-                          id: entry.id,
-                          isActive: !entry.is_active,
-                        })
-                      }
-                    >
-                      {entry.is_active ? "Скрыть" : "Опубликовать"}
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="destructive"
-                      disabled={deleteMutation.isPending}
-                      onClick={() => deleteMutation.mutate(entry.id)}
-                    >
-                      Удалить
-                    </Button>
-                  </div>
-                ) : null}
-              </div>
+              </details>
             ))}
           </div>
         )}
+        {pageCount > 1 ? (
+          <div className="flex items-center justify-between gap-2 text-sm">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={page === 0}
+              onClick={() => setPage(page - 1)}
+            >
+              Назад
+            </Button>
+            <span className="text-muted-foreground">
+              страница {page + 1} из {pageCount} · найдено {filtered.length}
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={page + 1 >= pageCount}
+              onClick={() => setPage(page + 1)}
+            >
+              Дальше
+            </Button>
+          </div>
+        ) : null}
       </CardContent>
     </Card>
   )

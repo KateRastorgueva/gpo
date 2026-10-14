@@ -20,7 +20,7 @@ from typing import Any
 from urllib.parse import urlparse
 
 import httpx
-from sqlalchemy import and_, or_
+from sqlalchemy import and_, or_, true
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import defer
 from sqlalchemy.sql.elements import ColumnElement
@@ -2756,11 +2756,30 @@ def get_source_public(
 
 
 def list_sources(
-    session: Session, *, skip: int = 0, limit: int = 100
+    session: Session,
+    *,
+    skip: int = 0,
+    limit: int = 100,
+    search: str | None = None,
+    source_type: str | None = None,
+    exclude_type: str | None = None,
 ) -> tuple[list[KnowledgeSourcePublic], int]:
-    total = session.exec(select(func.count()).select_from(KnowledgeSource)).one()
+    conditions: list[ColumnElement[bool]] = []
+    if search and search.strip():
+        conditions.append(col(KnowledgeSource.title).ilike(f"%{search.strip()}%"))
+    if source_type:
+        conditions.append(col(KnowledgeSource.source_type) == source_type)
+    if exclude_type:
+        conditions.append(col(KnowledgeSource.source_type) != exclude_type)
+    where = and_(true(), *conditions)
+    total = session.exec(
+        select(func.count()).select_from(KnowledgeSource).where(where)
+    ).one()
     rows = session.exec(
         select(KnowledgeSource)
+        .where(where)
+        # Полный текст для списка не нужен, а на больших PDF это мегабайты.
+        .options(defer(KnowledgeSource.content))  # type: ignore[arg-type]
         .order_by(col(KnowledgeSource.created_at).desc())
         .offset(skip)
         .limit(limit)
