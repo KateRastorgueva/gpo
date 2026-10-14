@@ -4,15 +4,28 @@ from app.services import rag_providers
 def _gemini_body(text: str, supported_bytes: int, with_chunk: bool = True) -> dict:  # type: ignore[type-arg]
     metadata = {
         "groundingChunks": [
-            {"retrievedContext": {"title": "Poryadok.pdf", "text": "фрагмент", "pageNumber": 3}}
+            {
+                "retrievedContext": {
+                    "title": "Poryadok.pdf",
+                    "text": "фрагмент",
+                    "pageNumber": 3,
+                }
+            }
         ]
         if with_chunk
         else [],
         "groundingSupports": [
-            {"segment": {"startIndex": 0, "endIndex": supported_bytes}, "groundingChunkIndices": [0]}
+            {
+                "segment": {"startIndex": 0, "endIndex": supported_bytes},
+                "groundingChunkIndices": [0],
+            }
         ],
     }
-    return {"candidates": [{"content": {"parts": [{"text": text}]}, "groundingMetadata": metadata}]}
+    return {
+        "candidates": [
+            {"content": {"parts": [{"text": text}]}, "groundingMetadata": metadata}
+        ]
+    }
 
 
 def test_gemini_grounded_answer_has_sources_and_coverage() -> None:
@@ -34,7 +47,9 @@ def test_gemini_no_answer_marker_is_not_grounded() -> None:
 
 
 def test_gemini_answer_without_chunks_is_not_grounded() -> None:
-    result = rag_providers.parse_gemini_response(_gemini_body("Ответ", 10, with_chunk=False))
+    result = rag_providers.parse_gemini_response(
+        _gemini_body("Ответ", 10, with_chunk=False)
+    )
     assert not result.grounded
 
 
@@ -49,7 +64,10 @@ def test_anythingllm_refusal_is_not_grounded() -> None:
 def test_anythingllm_answer_uses_best_source_score() -> None:
     body = {
         "textResponse": "Ответ",
-        "sources": [{"title": "a.pdf", "text": "t", "score": 0.71}, {"title": "b.pdf", "score": 0.5}],
+        "sources": [
+            {"title": "a.pdf", "text": "t", "score": 0.71},
+            {"title": "b.pdf", "score": 0.5},
+        ],
     }
     result = rag_providers.parse_anythingllm_response(body)
     assert result.grounded

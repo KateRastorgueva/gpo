@@ -106,7 +106,10 @@ class Settings(BaseSettings):
     # legacy (собственный поиск Postgres + Qdrant) | gemini_file_search | anythingllm.
     RAG_PROVIDER: str = "legacy"
     GEMINI_FILE_SEARCH_STORE: str | None = None
-    GEMINI_FILE_SEARCH_MODEL: str = "gemini-2.5-flash"
+    # Модели по порядку предпочтения, через запятую.
+    GEMINI_FILE_SEARCH_MODEL: str = (
+        "gemini-3.8-flash,gemini-flash-latest,gemini-flash-lite-latest"
+    )
     GEMINI_FILE_SEARCH_TOP_K: int = 8
     ANYTHINGLLM_BASE_URL: str = "http://anythingllm:3001"
     ANYTHINGLLM_API_KEY: str | None = None

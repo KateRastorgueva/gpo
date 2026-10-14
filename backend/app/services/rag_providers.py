@@ -28,6 +28,8 @@ SYSTEM_PROMPT = (
     f"одним словом {NO_ANSWER_MARKER} и ничего больше."
 )
 
+RETRYABLE_STATUS = {404, 429, 500, 503}
+
 # Ответ AnythingLLM в режиме query, когда в workspace нет подходящих фрагментов.
 ANYTHINGLLM_REFUSAL_PREFIX = "There is no relevant information"
 
@@ -81,10 +83,6 @@ def ask_gemini_file_search(question: str) -> ProviderAnswer:
     if not settings.GEMINI_FILE_SEARCH_STORE:
         raise RuntimeError("GEMINI_FILE_SEARCH_STORE is not configured")
 
-    url = (
-        f"{settings.GOOGLE_API_URL}/models/"
-        f"{settings.GEMINI_FILE_SEARCH_MODEL}:generateContent"
-    )
     payload = {
         "systemInstruction": {"parts": [{"text": SYSTEM_PROMPT}]},
         "contents": [{"role": "user", "parts": [{"text": question}]}],
@@ -98,10 +96,22 @@ def ask_gemini_file_search(question: str) -> ProviderAnswer:
         ],
         "generationConfig": {"temperature": 0.1},
     }
+    # Список моделей через запятую: при перегрузке (503/429) или снятой с
+    # поддержки модели (404) пробуем следующую, а не сразу зовём оператора.
+    models = [
+        m.strip() for m in settings.GEMINI_FILE_SEARCH_MODEL.split(",") if m.strip()
+    ]
     with httpx.Client(timeout=settings.RAG_PROVIDER_TIMEOUT_SECONDS) as client:
-        response = client.post(url, headers={"X-goog-api-key": api_key}, json=payload)
-        response.raise_for_status()
-        body = response.json()
+        for index, model in enumerate(models):
+            url = f"{settings.GOOGLE_API_URL}/models/{model}:generateContent"
+            response = client.post(
+                url, headers={"X-goog-api-key": api_key}, json=payload
+            )
+            if response.status_code in RETRYABLE_STATUS and index < len(models) - 1:
+                continue
+            response.raise_for_status()
+            body = response.json()
+            break
     return parse_gemini_response(body)
 
 
@@ -132,8 +142,7 @@ def parse_gemini_response(body: dict) -> ProviderAnswer:  # type: ignore[type-ar
             ProviderSource(
                 title=title,
                 snippet=(snippet or "")[:400] or None,
-                ref=f"gemini-file-search: {title}"
-                + (f", стр. {page}" if page else ""),
+                ref=f"gemini-file-search: {title}" + (f", стр. {page}" if page else ""),
                 page=int(page) if page else None,
             )
         )
