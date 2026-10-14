@@ -237,7 +237,7 @@ def ask(c: genai.Client, store: str, model: str, question: str) -> dict:
             )
             break
         except errors.APIError as exc:
-            if exc.code not in (404, 429, 500, 503) or index == len(models) - 1:
+            if exc.code not in (404, 429, 500, 503, 504) or index == len(models) - 1:
                 raise
     used_model = name
     answer = (response.text or "").strip()

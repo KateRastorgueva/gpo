@@ -79,3 +79,8 @@ def test_source_id_is_stable_per_title() -> None:
     a = rag_providers.ProviderSource(title="x.pdf")
     b = rag_providers.ProviderSource(title="x.pdf")
     assert a.source_id == b.source_id
+
+
+def test_no_answer_marker_with_latin_letters_is_detected() -> None:
+    result = rag_providers.parse_gemini_response(_gemini_body("НЕТ_OTBETА", 0))
+    assert not result.grounded

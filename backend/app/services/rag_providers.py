@@ -28,7 +28,7 @@ SYSTEM_PROMPT = (
     f"одним словом {NO_ANSWER_MARKER} и ничего больше."
 )
 
-RETRYABLE_STATUS = {404, 429, 500, 503}
+RETRYABLE_STATUS = {404, 429, 500, 503, 504}
 
 # Ответ AnythingLLM в режиме query, когда в workspace нет подходящих фрагментов.
 ANYTHINGLLM_REFUSAL_PREFIX = "There is no relevant information"
@@ -72,8 +72,12 @@ def ask_provider(question: str) -> ProviderAnswer:
     raise RuntimeError(f"Unknown external RAG_PROVIDER: {settings.RAG_PROVIDER}")
 
 
+# Модель иногда пишет маркер латиницей вперемешку с кириллицей: «НЕТ_OTBETА».
+_HOMOGLYPHS = str.maketrans("ABEKMHOPCTXY", "АВЕКМНОРСТХУ")
+
+
 def _is_no_answer(text: str) -> bool:
-    return not text.strip() or NO_ANSWER_MARKER in text.upper()
+    return not text.strip() or NO_ANSWER_MARKER in text.upper().translate(_HOMOGLYPHS)
 
 
 def ask_gemini_file_search(question: str) -> ProviderAnswer:

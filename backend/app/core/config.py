@@ -114,7 +114,7 @@ class Settings(BaseSettings):
     ANYTHINGLLM_BASE_URL: str = "http://anythingllm:3001"
     ANYTHINGLLM_API_KEY: str | None = None
     ANYTHINGLLM_WORKSPACE: str = "tusur"
-    RAG_PROVIDER_TIMEOUT_SECONDS: int = 60
+    RAG_PROVIDER_TIMEOUT_SECONDS: int = 90
 
     @computed_field  # type: ignore[prop-decorator]
     @property
