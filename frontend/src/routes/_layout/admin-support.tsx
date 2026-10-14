@@ -10,6 +10,7 @@ import { RequestsPanel } from "@/components/SupportAdmin/RequestsPanel"
 import { SearchPanel } from "@/components/SupportAdmin/SearchPanel"
 import { TaxonomyPanel } from "@/components/SupportAdmin/TaxonomyPanel"
 import { TicketsPanel } from "@/components/SupportAdmin/TicketsPanel"
+import { UsersPanel } from "@/components/SupportAdmin/UsersPanel"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import usePermissions from "@/hooks/usePermissions"
 import {
@@ -28,7 +29,7 @@ export const Route = createFileRoute("/_layout/admin-support")({
     }
   },
   head: () => ({
-    meta: [{ title: "Администрирование поддержки" }],
+    meta: [{ title: "Управление" }],
   }),
 })
 
@@ -90,6 +91,12 @@ const TABS: TabDefinition[] = [
     permission: PERMISSIONS.KNOWLEDGE_READ,
     render: () => <FaqPanel />,
   },
+  {
+    value: "users",
+    label: "Пользователи",
+    permission: PERMISSIONS.USER_MANAGE,
+    render: () => <UsersPanel />,
+  },
 ]
 
 function AdminSupportPage() {
@@ -112,7 +119,7 @@ function AdminSupportPage() {
   return (
     <div className="mx-auto grid w-full min-w-0 max-w-6xl grid-cols-1 gap-6">
       <div>
-        <h1 className="text-2xl font-semibold">Администрирование поддержки</h1>
+        <h1 className="text-2xl font-semibold">Управление</h1>
         <p className="text-sm text-muted-foreground">
           Роль: {roleName ?? "не задана"} — разделы и действия показаны по вашим
           правам.

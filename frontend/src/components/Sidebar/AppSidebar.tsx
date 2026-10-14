@@ -1,9 +1,7 @@
 import {
-  ClipboardList,
   Headset,
   Home,
   Settings2,
-  Users,
 } from "lucide-react"
 
 import { SidebarAppearance } from "@/components/Common/Appearance"
@@ -19,16 +17,14 @@ import { type Item, Main } from "./Main"
 import { User } from "./User"
 
 const baseItems: Item[] = [
-  { icon: Home, title: "Dashboard", path: "/" },
-  { icon: Headset, title: "Support", path: "/support" },
-  { icon: ClipboardList, title: "My requests", path: "/my-requests" },
+  { icon: Home, title: "Главная", path: "/" },
+  { icon: Headset, title: "Чат", path: "/support" },
 ]
 
 export function AppSidebar() {
   const {
     user: currentUser,
     canOpenSupportAdmin,
-    canManageUsers,
   } = usePermissions()
 
   // Разделы появляются по правам роли: оператор видит работу с обращениями,
@@ -39,13 +35,10 @@ export function AppSidebar() {
       ? [
           {
             icon: Settings2,
-            title: "Support Admin",
+            title: "Управление",
             path: "/admin-support",
           } satisfies Item,
         ]
-      : []),
-    ...(canManageUsers
-      ? [{ icon: Users, title: "Admin", path: "/admin" } satisfies Item]
       : []),
   ]
 
