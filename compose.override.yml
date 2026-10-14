@@ -150,10 +150,11 @@ services:
       - STORAGE_DIR=/app/server/storage
       - LLM_PROVIDER=gemini
       - GEMINI_API_KEY=${GEMINI_API_KEY:-${GOOGLE_API_KEY}}
-      - GEMINI_LLM_MODEL_PREF=gemini-flash-latest
-      - EMBEDDING_ENGINE=gemini
-      - GEMINI_EMBEDDING_API_KEY=${GEMINI_API_KEY:-${GOOGLE_API_KEY}}
-      - EMBEDDING_MODEL_PREF=gemini-embedding-001
+      - GEMINI_LLM_MODEL_PREF=gemini-flash-lite-latest
+      # Эмбеддинги считаются локально: у Gemini-эмбеддингов бесплатный
+      # поминутный лимит, AnythingLLM упирается в него на индексации.
+      - EMBEDDING_ENGINE=native
+      - EMBEDDING_MODEL_PREF=MintplexLabs/multilingual-e5-small
       - VECTOR_DB=lancedb
       - DISABLE_TELEMETRY=true
     volumes:

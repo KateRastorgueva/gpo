@@ -20,7 +20,7 @@ from pathlib import Path
 import httpx
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from gemini_file_search import GOLDEN, ROOT  # noqa: E402
+from gemini_file_search import GOLDEN, ROOT, SYSTEM_PROMPT  # noqa: E402
 
 BASE = os.environ.get("ANYTHINGLLM_URL", "http://localhost:3001")
 WORKSPACE = os.environ.get("ANYTHINGLLM_WORKSPACE", "tusur")
@@ -53,7 +53,13 @@ def ensure_workspace(c: httpx.Client) -> None:
     # Режим query: отвечать только по документам, иначе честный отказ.
     c.post(
         f"/workspace/{WORKSPACE}/update",
-        json={"chatMode": "query", "openAiTemp": 0.1, "topN": 8},
+        json={
+            "chatMode": "query",
+            "openAiTemp": 0.1,
+            "topN": 8,
+            # Тот же промпт, что у Gemini: маркер НЕТ_ОТВЕТА уводит к оператору.
+            "openAiPrompt": SYSTEM_PROMPT,
+        },
     ).raise_for_status()
 
 
