@@ -22,6 +22,7 @@ from urllib.parse import urlparse
 import httpx
 from sqlalchemy import and_, or_
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import defer
 from sqlalchemy.sql.elements import ColumnElement
 from sqlmodel import Session, col, delete, func, select
 
@@ -71,6 +72,7 @@ from app.models import (
     TagPublic,
     User,
 )
+from app.services import rag_providers
 
 CRITICAL_KEYWORDS = (
     "срок",
@@ -988,6 +990,8 @@ def _lexical_rows(
             KnowledgeSource, col(KnowledgeChunk.source_id) == col(KnowledgeSource.id)
         )
         .outerjoin(KnowledgeDoc, col(KnowledgeChunk.doc_id) == col(KnowledgeDoc.id))
+        # Полный текст источника тут не нужен, а на больших PDF он съедает память.
+        .options(defer(KnowledgeSource.content))  # type: ignore[arg-type]
     )
     statement = statement.where(_lexical_owner_condition(owner_types))
     if category_ids:
@@ -1361,11 +1365,12 @@ def _build_prompt(question: str, results: list[RetrievalResult]) -> str:
 def _generate_with_google(prompt: str) -> str:
     """Генерирует ответ через Google Generative Language API."""
 
-    if not settings.GOOGLE_API_KEY:
-        raise RuntimeError("GOOGLE_API_KEY is not configured")
+    api_key = settings.gemini_api_key
+    if not api_key:
+        raise RuntimeError("GEMINI_API_KEY is not configured")
     url = f"{settings.GOOGLE_API_URL}/models/{settings.GOOGLE_MODEL}:generateContent"
     payload = {"contents": [{"parts": [{"text": prompt}]}]}
-    headers = {"X-goog-api-key": settings.GOOGLE_API_KEY}
+    headers = {"X-goog-api-key": api_key}
     with httpx.Client(timeout=settings.OLLAMA_TIMEOUT_SECONDS) as client:
         response = client.post(url, headers=headers, json=payload)
         response.raise_for_status()
@@ -1576,6 +1581,116 @@ def routing_thresholds() -> tuple[float, float, int]:
     )
 
 
+def _run_external_rag(
+    *,
+    session: Session,
+    user_id: uuid.UUID | None,
+    payload: SupportAskRequest,
+    session_id: str,
+    faq_score: float,
+    critical: bool,
+    started: float,
+) -> SupportAskResponse:
+    """Шаг RAG через внешний движок (Gemini File Search или AnythingLLM)."""
+
+    def _record(**kwargs: Any) -> SupportAskResponse:
+        return _record_support_result(
+            session=session,
+            user_id=user_id,
+            payload=payload,
+            session_id=session_id,
+            response_time_ms=_elapsed_ms(started),
+            **kwargs,
+        )
+
+    try:
+        result = rag_providers.ask_provider(payload.question)
+    except Exception:
+        return _record(
+            mode="operator",
+            confidence=0.0,
+            fallback_used=False,
+            escalated=True,
+            answer_text="Поиск по базе знаний временно недоступен. Обращение передано оператору.",
+            sources=[],
+            escalation_reason="retrieval-failure",
+            route_reason="retrieval_failure",
+            decision_metrics=DecisionMetrics(
+                top_score=0.0,
+                relevant_chunks=0,
+                faq_score=_clamp_score(faq_score),
+                conflict=False,
+                critical=critical,
+            ),
+        )
+
+    sources = [
+        SourceAttribution(
+            source_id=item.source_id,
+            source_title=item.title,
+            source_ref=item.ref,
+            chunk_id=None,
+            snippet=item.snippet,
+            score=item.score,
+        )
+        for item in result.sources[: settings.RETRIEVAL_TOP_K]
+    ]
+    confidence = _clamp_score(result.confidence)
+    decision_metrics = DecisionMetrics(
+        top_score=confidence,
+        relevant_chunks=len(result.sources),
+        faq_score=_clamp_score(faq_score),
+        conflict=False,
+        critical=critical,
+    )
+
+    if not result.grounded:
+        return _record(
+            mode="operator",
+            confidence=confidence,
+            fallback_used=False,
+            escalated=True,
+            answer_text="Автоматический ответ недоступен. Обращение передано оператору.",
+            sources=sources,
+            escalation_reason="insufficient-context",
+            route_reason="insufficient_context",
+            decision_metrics=decision_metrics,
+        )
+
+    if critical and confidence < settings.CRITICAL_CONFIDENCE_THRESHOLD:
+        return _record(
+            mode="operator",
+            confidence=confidence,
+            fallback_used=False,
+            escalated=True,
+            answer_text="Для этого вопроса требуется проверка оператором. Обращение передано.",
+            sources=sources,
+            escalation_reason="low-confidence-critical",
+            route_reason="critical_low_confidence",
+            decision_metrics=decision_metrics,
+        )
+
+    answer_text = result.answer
+    if (
+        not critical
+        and settings.LOW_CONFIDENCE_MIN <= confidence <= settings.LOW_CONFIDENCE_MAX
+    ):
+        answer_text = (
+            f"{answer_text}\n\nТребуется проверка актуальности по указанным источникам."
+        )
+    return _record(
+        mode="rag",
+        confidence=confidence,
+        fallback_used=False,
+        escalated=False,
+        answer_text=answer_text,
+        sources=sources,
+        escalation_reason=None,
+        route_reason="rag_answer",
+        decision_metrics=decision_metrics,
+    )
+
+
 def run_support_pipeline(
     *, session: Session, user_id: uuid.UUID | None, payload: SupportAskRequest
 ) -> SupportAskResponse:
@@ -1617,6 +1732,17 @@ def run_support_pipeline(
             route_reason="faq_hit",
             decision_metrics=decision_metrics,
             response_time_ms=_elapsed_ms(started),
+        )
+
+    if rag_providers.is_external_provider_enabled():
+        return _run_external_rag(
+            session=session,
+            user_id=user_id,
+            payload=payload,
+            session_id=session_id,
+            faq_score=faq_score,
+            critical=critical,
+            started=started,
         )
 
     try:

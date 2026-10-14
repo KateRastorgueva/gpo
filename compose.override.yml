@@ -134,7 +134,32 @@ services:
     ports:
       - 9323:9323
 
+  # Готовый RAG-движок для сравнения с Gemini File Search (RAG_PROVIDER=anythingllm).
+  # Не стартует по умолчанию: docker compose --profile anythingllm up -d anythingllm
+  anythingllm:
+    image: mintplexlabs/anythingllm:1.17.0
+    profiles: ["anythingllm"]
+    cap_add:
+      - SYS_ADMIN
+    ports:
+      - "3001:3001"
+    environment:
+      - STORAGE_DIR=/app/server/storage
+      - LLM_PROVIDER=gemini
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - GEMINI_LLM_MODEL_PREF=${GEMINI_FILE_SEARCH_MODEL:-gemini-2.5-flash}
+      - EMBEDDING_ENGINE=gemini
+      - GEMINI_EMBEDDING_API_KEY=${GEMINI_API_KEY}
+      - EMBEDDING_MODEL_PREF=gemini-embedding-001
+      - VECTOR_DB=lancedb
+      - DISABLE_TELEMETRY=true
+    volumes:
+      - anythingllm-storage:/app/server/storage
+
 networks:
   traefik-public:
     # For local dev, don't expect an external Traefik network
     external: false
+
+volumes:
+  anythingllm-storage:
