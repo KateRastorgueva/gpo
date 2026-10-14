@@ -1,5 +1,4 @@
 import {
-  Briefcase,
   ClipboardList,
   Headset,
   Home,
@@ -21,7 +20,6 @@ import { User } from "./User"
 
 const baseItems: Item[] = [
   { icon: Home, title: "Dashboard", path: "/" },
-  { icon: Briefcase, title: "Items", path: "/items" },
   { icon: Headset, title: "Support", path: "/support" },
   { icon: ClipboardList, title: "My requests", path: "/my-requests" },
 ]
