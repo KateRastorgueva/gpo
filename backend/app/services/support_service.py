@@ -2047,6 +2047,7 @@ def list_support_history(
                 fallback_used=request.fallback_used,
                 status=request.status,
                 created_at=request.created_at,
+                session_id=request.session_id,
                 steps=steps,
             )
         )

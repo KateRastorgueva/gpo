@@ -45,8 +45,56 @@ const storeChats = (chats: Chat[]) => {
   }
 }
 
+// Удалённые из списка чаты: на сервере история остаётся (её видит оператор),
+// поэтому прячем их по session_id.
+const HIDDEN_KEY = "support_hidden_chats"
+
+const loadHidden = (): string[] => {
+  try {
+    return JSON.parse(localStorage.getItem(HIDDEN_KEY) ?? "[]")
+  } catch {
+    return []
+  }
+}
+
+const hideChat = (sessionId: string) => {
+  try {
+    localStorage.setItem(
+      HIDDEN_KEY,
+      JSON.stringify([...new Set([...loadHidden(), sessionId])]),
+    )
+  } catch {
+    // без localStorage чат вернётся после перезагрузки
+  }
+}
+
 const shortTitle = (text: string) =>
   text.length > 60 ? `${text.slice(0, 60)}…` : text
+
+// Чаты с сервера: обращения пользователя, сгруппированные по session_id.
+// Так история видна в любом браузере, а не только там, где чат начинали.
+const chatsFromHistory = (entries: SupportHistoryEntry[]): Chat[] => {
+  const bySession = new Map<string, Chat>()
+  // История приходит от новых к старым: первое попадание — последнее сообщение.
+  for (const entry of entries) {
+    if (!entry.session_id) continue
+    const existing = bySession.get(entry.session_id)
+    if (!existing) {
+      bySession.set(entry.session_id, {
+        sessionId: entry.session_id,
+        title: shortTitle(entry.question),
+        lastMessageAt: entry.created_at ?? new Date().toISOString(),
+      })
+    } else {
+      existing.title = shortTitle(entry.question)
+    }
+  }
+  return [...bySession.values()]
+}
+
+// Автоответ системы = первый не-операторский шаг; ответ оператора идёт отдельно.
+const autoAnswer = (entry: SupportHistoryEntry) =>
+  entry.steps.find((step) => step.step !== "human")?.answer ?? entry.answer
 
 // Ответ оператора приходит отдельным финальным шагом "human".
 const operatorReply = (entry: SupportHistoryEntry) =>
@@ -79,6 +127,39 @@ function SupportPage() {
     storeChats(next)
   }
 
+  const serverChatsQuery = useQuery({
+    queryKey: ["supportChats"],
+    queryFn: () => getSupportHistory(undefined, 200),
+  })
+
+  // Склеиваем локальные чаты (в т.ч. только что созданные, пустые) с серверными.
+  useEffect(() => {
+    const hidden = new Set(loadHidden())
+    const fromServer = chatsFromHistory(
+      serverChatsQuery.data?.data ?? [],
+    ).filter((chat) => !hidden.has(chat.sessionId))
+    if (!fromServer.length) return
+    setChats((local) => {
+      const merged = new Map(local.map((chat) => [chat.sessionId, chat]))
+      for (const chat of fromServer) {
+        const current = merged.get(chat.sessionId)
+        merged.set(chat.sessionId, {
+          ...chat,
+          lastMessageAt:
+            current && current.lastMessageAt > chat.lastMessageAt
+              ? current.lastMessageAt
+              : chat.lastMessageAt,
+        })
+      }
+      const next = [...merged.values()].sort((a, b) =>
+        b.lastMessageAt.localeCompare(a.lastMessageAt),
+      )
+      storeChats(next)
+      return next
+    })
+    setActiveId((id) => id ?? fromServer[0]?.sessionId ?? null)
+  }, [serverChatsQuery.data])
+
   const activeChat = chats.find((chat) => chat.sessionId === activeId) ?? null
 
   const historyQuery = useQuery({
@@ -107,6 +188,7 @@ function SupportPage() {
       await queryClient.invalidateQueries({
         queryKey: ["supportHistory", vars.sessionId],
       })
+      queryClient.invalidateQueries({ queryKey: ["supportChats"] })
       setPendingQuestion(null)
     },
     onError: (error: Error, vars) => {
@@ -158,6 +240,7 @@ function SupportPage() {
 
   const deleteChat = (sessionId: string) => {
     const next = chats.filter((chat) => chat.sessionId !== sessionId)
+    hideChat(sessionId)
     updateChats(next)
     queryClient.removeQueries({ queryKey: ["supportHistory", sessionId] })
     if (activeId === sessionId) setActiveId(next[0]?.sessionId ?? null)
@@ -288,7 +371,7 @@ function SupportPage() {
                   />
                   <Message
                     type="bot"
-                    content={entry.answer}
+                    content={autoAnswer(entry)}
                     mode={entry.mode}
                     confidence={entry.confidence}
                     sources={entry.sources}

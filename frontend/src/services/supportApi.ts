@@ -57,6 +57,7 @@ export type SupportHistoryEntry = {
   fallback_used: boolean
   status: string
   created_at?: string | null
+  session_id?: string | null
   steps: SupportStep[]
 }
 
@@ -278,9 +279,9 @@ export const askSupport = (payload: {
     body: JSON.stringify(payload),
   })
 
-export const getSupportHistory = (sessionId: string) =>
+export const getSupportHistory = (sessionId?: string, limit?: number) =>
   request<ListResponse<SupportHistoryEntry>>(
-    `/api/v1/support/history${query({ session_id: sessionId })}`,
+    `/api/v1/support/history${query({ session_id: sessionId, limit })}`,
     { method: "GET", headers: authHeader() },
   )
 
