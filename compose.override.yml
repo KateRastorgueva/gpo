@@ -108,6 +108,9 @@ services:
       args:
         - VITE_API_URL=http://127.0.0.1:8000
         - NODE_ENV=development
+    volumes:
+      # /api проксируется в backend: фронтенд работает с того же origin (туннель, доступ по IP)
+      - ./frontend/nginx-backend-proxy.conf:/etc/nginx/extra-conf.d/backend-not-found.conf:ro
 
   playwright:
     build:
@@ -134,7 +137,35 @@ services:
     ports:
       - 9323:9323
 
+  # Готовый RAG-движок для сравнения с Gemini File Search (RAG_PROVIDER=anythingllm).
+  # Не стартует по умолчанию: docker compose --profile anythingllm up -d anythingllm
+  anythingllm:
+    image: mintplexlabs/anythingllm:1.17.0
+    profiles: ["anythingllm"]
+    cap_add:
+      - SYS_ADMIN
+    ports:
+      - "3001:3001"
+    environment:
+      - STORAGE_DIR=/app/server/storage
+      - LLM_PROVIDER=gemini
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-${GOOGLE_API_KEY}}
+      - GEMINI_LLM_MODEL_PREF=gemini-flash-lite-latest
+      # Эмбеддинги считаются локально: у Gemini-эмбеддингов бесплатный
+      # поминутный лимит, AnythingLLM упирается в него на индексации.
+      - EMBEDDING_ENGINE=native
+      - EMBEDDING_MODEL_PREF=MintplexLabs/multilingual-e5-small
+      - VECTOR_DB=lancedb
+      # OCR сканов: по умолчанию eng, русский текст превращается в мусор.
+      - TARGET_OCR_LANG=rus,eng
+      - DISABLE_TELEMETRY=true
+    volumes:
+      - anythingllm-storage:/app/server/storage
+
 networks:
   traefik-public:
     # For local dev, don't expect an external Traefik network
     external: false
+
+volumes:
+  anythingllm-storage:

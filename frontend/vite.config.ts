@@ -19,4 +19,13 @@ export default defineConfig({
     react(),
     tailwindcss(),
   ],
+  server: {
+    // Dev-сервер отдаёт /api с того же origin (туннель, доступ по IP с другого устройства)
+    proxy: {
+      "/api": {
+        target: process.env.VITE_PROXY_TARGET ?? "http://localhost:8000",
+        changeOrigin: true,
+      },
+    },
+  },
 })

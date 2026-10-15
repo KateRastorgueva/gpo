@@ -2,7 +2,7 @@ import uuid
 from typing import Any
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
-from sqlmodel import delete
+from sqlmodel import col, delete
 
 from app.api.deps import CurrentUser, SessionDep, require_permission
 from app.core.config import settings
@@ -125,7 +125,9 @@ def _create_and_index_source(
         session.add(source)
         session.commit()
         status_code = 400 if isinstance(exc, ValueError) else 500
-        raise HTTPException(status_code=status_code, detail=f"Failed to index source: {exc}")
+        raise HTTPException(
+            status_code=status_code, detail=f"Failed to index source: {exc}"
+        )
     session.refresh(source)
     return get_source_public(session, source)
 
@@ -188,8 +190,22 @@ def delete_faq(*, session: SessionDep, faq_id: uuid.UUID) -> Any:
     dependencies=[Depends(require_permission(KNOWLEDGE_READ))],
     response_model=KnowledgeSourcesPublic,
 )
-def list_sources(session: SessionDep, skip: int = 0, limit: int = 100) -> Any:
-    data, count = list_sources_with_taxonomy(session, skip=skip, limit=limit)
+def list_sources(
+    session: SessionDep,
+    skip: int = 0,
+    limit: int = 100,
+    search: str | None = None,
+    source_type: str | None = None,
+    exclude_type: str | None = None,
+) -> Any:
+    data, count = list_sources_with_taxonomy(
+        session,
+        skip=skip,
+        limit=limit,
+        search=search,
+        source_type=source_type,
+        exclude_type=exclude_type,
+    )
     return KnowledgeSourcesPublic(data=data, count=count)
 
 
@@ -283,7 +299,7 @@ def delete_source(*, session: SessionDep, source_id: uuid.UUID) -> Any:
     except Exception:
         # Keep delete operation non-blocking for DB consistency.
         pass
-    session.exec(delete(KnowledgeSource).where(KnowledgeSource.id == source_id))
+    session.exec(delete(KnowledgeSource).where(col(KnowledgeSource.id) == source_id))
     session.commit()
     return Message(message="Source deleted successfully")
 

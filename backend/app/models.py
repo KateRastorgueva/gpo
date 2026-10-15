@@ -792,6 +792,8 @@ class SupportHistoryEntry(SQLModel):
     fallback_used: bool
     status: str = Field(default="completed", min_length=1, max_length=20)
     created_at: datetime | None = None
+    # Чат, к которому относится обращение: по нему фронт собирает список чатов.
+    session_id: str | None = None
     # Все шаги обработки, включая автоматические и (позже) ответ оператора.
     steps: list[SupportHistoryStep] = Field(default_factory=list)
 

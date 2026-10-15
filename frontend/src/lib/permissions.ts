@@ -38,6 +38,7 @@ export const SUPPORT_ADMIN_PERMISSIONS: Permission[] = [
   PERMISSIONS.METRICS_READ,
   PERMISSIONS.TICKET_READ,
   PERMISSIONS.KNOWLEDGE_READ,
+  PERMISSIONS.USER_MANAGE,
 ]
 
 export const canOpenSupportAdmin = (user: UserLike) =>

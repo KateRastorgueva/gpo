@@ -1339,6 +1339,90 @@ export const MessageSchema = {
     title: 'Message'
 } as const;
 
+export const MyQueueEntrySchema = {
+    properties: {
+        queue_id: {
+            type: 'string',
+            format: 'uuid',
+            title: 'Queue Id'
+        },
+        request_id: {
+            type: 'string',
+            format: 'uuid',
+            title: 'Request Id'
+        },
+        question: {
+            type: 'string',
+            title: 'Question'
+        },
+        reason: {
+            type: 'string',
+            title: 'Reason'
+        },
+        status: {
+            type: 'string',
+            title: 'Status'
+        },
+        created_at: {
+            anyOf: [
+                {
+                    type: 'string',
+                    format: 'date-time'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Created At'
+        },
+        reply_text: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Reply Text'
+        },
+        reply_created_at: {
+            anyOf: [
+                {
+                    type: 'string',
+                    format: 'date-time'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Reply Created At'
+        }
+    },
+    type: 'object',
+    required: ['queue_id', 'request_id', 'question', 'reason', 'status'],
+    title: 'MyQueueEntry'
+} as const;
+
+export const MyQueuePublicSchema = {
+    properties: {
+        data: {
+            items: {
+                '$ref': '#/components/schemas/MyQueueEntry'
+            },
+            type: 'array',
+            title: 'Data'
+        },
+        count: {
+            type: 'integer',
+            title: 'Count'
+        }
+    },
+    type: 'object',
+    required: ['data', 'count'],
+    title: 'MyQueuePublic'
+} as const;
+
 export const NewPasswordSchema = {
     properties: {
         token: {
@@ -1776,6 +1860,13 @@ export const SupportHistoryEntrySchema = {
         fallback_used: {
             type: 'boolean',
             title: 'Fallback Used'
+        },
+        status: {
+            type: 'string',
+            maxLength: 20,
+            minLength: 1,
+            title: 'Status',
+            default: 'completed'
         },
         created_at: {
             anyOf: [

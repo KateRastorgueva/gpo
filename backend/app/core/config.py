@@ -99,6 +99,28 @@ class Settings(BaseSettings):
     GOOGLE_EMBEDDING_MODEL: str = "gemini-embedding-001"
     GOOGLE_API_URL: str = "https://generativelanguage.googleapis.com/v1beta"
 
+    # Ключ AI Studio. Если не задан, используется GOOGLE_API_KEY.
+    GEMINI_API_KEY: str | None = None
+
+    # Какой движок отвечает после промаха FAQ:
+    # legacy (собственный поиск Postgres + Qdrant) | gemini_file_search | anythingllm.
+    RAG_PROVIDER: str = "legacy"
+    GEMINI_FILE_SEARCH_STORE: str | None = None
+    # Модели по порядку предпочтения, через запятую.
+    GEMINI_FILE_SEARCH_MODEL: str = (
+        "gemini-3.8-flash,gemini-flash-latest,gemini-flash-lite-latest"
+    )
+    GEMINI_FILE_SEARCH_TOP_K: int = 8
+    ANYTHINGLLM_BASE_URL: str = "http://anythingllm:3001"
+    ANYTHINGLLM_API_KEY: str | None = None
+    ANYTHINGLLM_WORKSPACE: str = "tusur"
+    RAG_PROVIDER_TIMEOUT_SECONDS: int = 90
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def gemini_api_key(self) -> str | None:
+        return self.GEMINI_API_KEY or self.GOOGLE_API_KEY
+
     OLLAMA_BASE_URL: str = "http://localhost:11434"
     OLLAMA_MODEL: str = "llama3.1:8b"
     OLLAMA_TIMEOUT_SECONDS: int = 30

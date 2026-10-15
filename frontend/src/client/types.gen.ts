@@ -247,6 +247,22 @@ export type Message = {
     message: string;
 };
 
+export type MyQueueEntry = {
+    queue_id: string;
+    request_id: string;
+    question: string;
+    reason: string;
+    status: string;
+    created_at?: (string | null);
+    reply_text?: (string | null);
+    reply_created_at?: (string | null);
+};
+
+export type MyQueuePublic = {
+    data: Array<MyQueueEntry>;
+    count: number;
+};
+
 export type NewPassword = {
     token: string;
     new_password: string;
@@ -339,6 +355,7 @@ export type SupportHistoryEntry = {
     confidence: number;
     escalated: boolean;
     fallback_used: boolean;
+    status?: string;
     created_at?: (string | null);
     steps?: Array<SupportHistoryStep>;
 };
@@ -762,6 +779,8 @@ export type SupportGetSupportHistoryData = {
 };
 
 export type SupportGetSupportHistoryResponse = (SupportHistoryPublic);
+
+export type SupportGetMyQueueResponse = (MyQueuePublic);
 
 export type SupportSubmitSupportFeedbackData = {
     requestBody: SupportFeedbackCreate;
