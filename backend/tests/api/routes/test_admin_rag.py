@@ -1,23 +1,32 @@
 """Админка внешних RAG-движков: переключатель и пакетная загрузка с прогрессом."""
 
+from collections.abc import Iterator
 from unittest.mock import patch
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlmodel import Session
+from sqlmodel import Session, delete
 
 from app.core.config import settings
+from app.core.db import engine
+from app.models import AppSetting
 from app.services import rag_ingest, rag_providers
 
 API = f"{settings.API_V1_STR}/admin/rag"
 
 
 @pytest.fixture(autouse=True)
-def _engines(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:  # type: ignore[no-untyped-def]
+def _engines(monkeypatch: pytest.MonkeyPatch, tmp_path) -> Iterator[None]:  # type: ignore[no-untyped-def]
     monkeypatch.setattr(settings, "GEMINI_API_KEY", "test-key")
     monkeypatch.setattr(settings, "GEMINI_FILE_SEARCH_STORE", "fileSearchStores/t")
     monkeypatch.setattr(settings, "ANYTHINGLLM_API_KEY", "test-key")
     monkeypatch.setattr(rag_ingest, "INGEST_DIR", tmp_path)
+    yield
+    # Выбранный движок хранится в БД: без сброса тесты чата дальше пошли бы во
+    # внешний движок вместо встроенного поиска.
+    with Session(engine) as session:
+        session.execute(delete(AppSetting))
+        session.commit()
 
 
 def test_provider_toggle_is_persisted(
