@@ -10,7 +10,10 @@ from app.core.db import engine, init_db
 from app.main import app
 from app.models import (
     ActiveRequest,
+    AppSetting,
     DocTag,
+    IngestItem,
+    IngestJob,
     Item,
     KnowledgeArchive,
     KnowledgeCategory,
@@ -74,6 +77,9 @@ def db() -> Generator[Session, None, None]:
         session.execute(delete(KnowledgeDoc))
         session.execute(delete(Tag))
         session.execute(delete(KnowledgeCategory))
+        session.execute(delete(IngestItem))
+        session.execute(delete(IngestJob))
+        session.execute(delete(AppSetting))
         statement = delete(Item)
         session.execute(statement)
         statement = delete(User)

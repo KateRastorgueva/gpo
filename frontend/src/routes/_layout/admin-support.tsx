@@ -3,6 +3,7 @@ import { useState } from "react"
 
 import { UsersService } from "@/client"
 import { DocsPanel } from "@/components/SupportAdmin/DocsPanel"
+import { EnginesPanel } from "@/components/SupportAdmin/EnginesPanel"
 import { FaqPanel } from "@/components/SupportAdmin/FaqPanel"
 import { KnowledgePanel } from "@/components/SupportAdmin/KnowledgePanel"
 import { MetricsPanel } from "@/components/SupportAdmin/MetricsPanel"
@@ -72,6 +73,12 @@ const TABS: TabDefinition[] = [
     label: "Документы",
     permission: PERMISSIONS.KNOWLEDGE_READ,
     render: () => <DocsPanel />,
+  },
+  {
+    value: "engines",
+    label: "Движки RAG",
+    permission: PERMISSIONS.KNOWLEDGE_READ,
+    render: () => <EnginesPanel />,
   },
   {
     value: "taxonomy",

@@ -1665,6 +1665,7 @@ def _run_external_rag(
     faq_score: float,
     critical: bool,
     started: float,
+    provider: str,
 ) -> SupportAskResponse:
     """Шаг RAG через внешний движок (Gemini File Search или AnythingLLM)."""
 
@@ -1679,7 +1680,7 @@ def _run_external_rag(
         )
 
     try:
-        result = rag_providers.ask_provider(payload.question)
+        result = rag_providers.ask_provider(payload.question, provider)
     except Exception:
         return _record(
             mode="operator",
@@ -1809,7 +1810,9 @@ def run_support_pipeline(
             response_time_ms=_elapsed_ms(started),
         )
 
-    if rag_providers.is_external_provider_enabled():
+    # Движок переключается админом на лету, поэтому читается на каждый запрос.
+    provider = rag_providers.get_active_provider(session)
+    if rag_providers.is_external_provider_enabled(provider):
         return _run_external_rag(
             session=session,
             user_id=user_id,
@@ -1818,6 +1821,7 @@ def run_support_pipeline(
             faq_score=faq_score,
             critical=critical,
             started=started,
+            provider=provider,
         )
 
     try:

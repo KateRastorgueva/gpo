@@ -954,3 +954,136 @@ class MyQueueEntry(SQLModel):
 class MyQueuePublic(SQLModel):
     data: list[MyQueueEntry]
     count: int
+
+
+# --------------------------- внешние RAG-движки ---------------------------
+
+RagProviderName = Literal["legacy", "gemini_file_search", "anythingllm"]
+IngestTarget = Literal["gemini", "anythingllm", "both"]
+
+
+class AppSetting(SQLModel, table=True):
+    """Настройки, которые админ меняет на лету (например, активный RAG-движок).
+
+    Хранятся в БД, а не в памяти процесса: backend работает в нескольких воркерах.
+    """
+
+    __tablename__ = "app_setting"
+
+    key: str = Field(primary_key=True, max_length=100)
+    value: str = Field(max_length=1000)
+    updated_at: datetime = Field(
+        default_factory=get_datetime_utc,
+        sa_type=DateTime(timezone=True),  # type: ignore
+    )
+
+
+class IngestJob(SQLModel, table=True):
+    """Пакетная загрузка файлов во внешние движки (Gemini / AnythingLLM)."""
+
+    __tablename__ = "ingest_job"
+
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    target: str = Field(max_length=20)
+    total: int = Field(ge=1)
+    created_by: uuid.UUID | None = Field(
+        default=None, foreign_key="app_user.id", nullable=True, ondelete="SET NULL"
+    )
+    created_at: datetime = Field(
+        default_factory=get_datetime_utc,
+        sa_type=DateTime(timezone=True),  # type: ignore
+    )
+
+
+class IngestItem(SQLModel, table=True):
+    """Один файл пакета: статус по каждому движку и ошибка, если была."""
+
+    __tablename__ = "ingest_item"
+
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    job_id: uuid.UUID = Field(
+        foreign_key="ingest_job.id", nullable=False, ondelete="CASCADE", index=True
+    )
+    filename: str = Field(max_length=500)
+    size_bytes: int = 0
+    # queued -> running -> done | failed
+    status: str = Field(default="queued", max_length=20, index=True)
+    # ok | already | no-text | error | None (движок не выбран)
+    gemini_status: str | None = Field(default=None, max_length=20)
+    anythingllm_status: str | None = Field(default=None, max_length=20)
+    error: str | None = Field(default=None, max_length=2000)
+    created_at: datetime = Field(
+        default_factory=get_datetime_utc,
+        sa_type=DateTime(timezone=True),  # type: ignore
+    )
+    started_at: datetime | None = Field(
+        default=None, sa_type=DateTime(timezone=True)  # type: ignore
+    )
+    finished_at: datetime | None = Field(
+        default=None, sa_type=DateTime(timezone=True)  # type: ignore
+    )
+
+
+class RagProviderOption(SQLModel):
+    name: str
+    label: str
+    configured: bool
+
+
+class RagProviderPublic(SQLModel):
+    active: str
+    default: str
+    options: list[RagProviderOption]
+
+
+class RagProviderUpdate(SQLModel):
+    provider: RagProviderName
+
+
+class IngestJobCreate(SQLModel):
+    target: IngestTarget
+    total: int = Field(ge=1, le=1000)
+
+
+class IngestItemPublic(SQLModel):
+    id: uuid.UUID
+    filename: str
+    size_bytes: int
+    status: str
+    gemini_status: str | None = None
+    anythingllm_status: str | None = None
+    error: str | None = None
+    started_at: datetime | None = None
+    finished_at: datetime | None = None
+
+
+class IngestJobPublic(SQLModel):
+    id: uuid.UUID
+    target: str
+    total: int
+    uploaded: int
+    done: int
+    failed: int
+    finished: bool
+    eta_seconds: int | None = None
+    created_at: datetime
+    items: list[IngestItemPublic] = []
+
+
+class IngestJobsPublic(SQLModel):
+    data: list[IngestJobPublic]
+    count: int
+
+
+class EngineDocument(SQLModel):
+    name: str
+    state: str | None = None
+    size_bytes: int | None = None
+
+
+class EngineDocumentsPublic(SQLModel):
+    engine: str
+    configured: bool
+    error: str | None = None
+    data: list[EngineDocument]
+    count: int
