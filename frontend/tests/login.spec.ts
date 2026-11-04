@@ -132,3 +132,23 @@ test("Allows opening /login with invalid token and clears stale auth", async ({
     page.evaluate(() => localStorage.getItem("access_token")),
   ).resolves.toBeNull()
 })
+
+test("Login page makes no unauthorized (401/403) API requests", async ({
+  page,
+}) => {
+  const unauthorized: string[] = []
+  page.on("response", (r) => {
+    if ([401, 403].includes(r.status())) unauthorized.push(r.url())
+  })
+  let navigations = 0
+  page.on("framenavigated", (f) => {
+    if (f === page.mainFrame()) navigations++
+  })
+
+  await page.goto("/login")
+  await page.waitForLoadState("networkidle")
+  await page.waitForTimeout(1500)
+
+  expect(unauthorized).toEqual([])
+  expect(navigations).toBe(1)
+})
