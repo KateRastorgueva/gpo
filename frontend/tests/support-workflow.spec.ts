@@ -123,6 +123,7 @@ test("operator answers an escalated question and the user sees the answer", asyn
   const operatorPage = await operatorContext.newPage()
   await logInUser(operatorPage, operator.email, operator.password)
   await operatorPage.goto("/admin-support")
+  await operatorPage.getByRole("tab", { name: "Обращения" }).click()
   await operatorPage.getByRole("tab", { name: "Тикеты" }).click()
 
   const card = operatorPage

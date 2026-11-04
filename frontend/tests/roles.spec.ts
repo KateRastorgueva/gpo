@@ -75,17 +75,19 @@ test("operator sees support admin without knowledge editing", async ({
   await expect(page.getByText(/Роль: operator/)).toBeVisible()
 
   // Вкладки по правам: метрики, обращения и знания на чтение
-  for (const tab of ["Метрики", "Очередь и журнал", "Тикеты", "База знаний"]) {
+  for (const tab of ["Метрики", "Обращения", "Знания"]) {
     await expect(page.getByRole("tab", { name: tab })).toBeVisible()
   }
 
   // Знания доступны на чтение: формы создания источника нет, «Удалить» нет
-  await page.getByRole("tab", { name: "База знаний" }).click()
+  await page.getByRole("tab", { name: "Знания" }).click()
+  await page.getByRole("tab", { name: "Источники" }).click()
   await expect(page.getByText("Источники знаний")).toBeVisible()
   await expect(page.getByText("Новый источник знаний")).toHaveCount(0)
   await expect(page.getByRole("button", { name: "Удалить" })).toHaveCount(0)
 
   // Тикеты оператор может решать: предупреждение об отсутствии прав не показывается
+  await page.getByRole("tab", { name: "Обращения" }).click()
   await page.getByRole("tab", { name: "Тикеты" }).click()
   await expect(page.getByText(/Действия недоступны/)).toHaveCount(0)
 
