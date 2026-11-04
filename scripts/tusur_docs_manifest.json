@@ -1,0 +1,105 @@
+{
+ "_comment": "Эталон папки tusur docs: имена, размеры и SHA-256 правильных PDF. Проверяется scripts/sync_tusur_docs.ps1.",
+ "files": [
+  {
+   "name": "2026-27-.pdf",
+   "bytes": 853369,
+   "sha256": "049574b230693deaa6c52ee87f3809b2172f4941a9670b2e14fa39d4cfe6effd"
+  },
+  {
+   "name": "Izmeneniya_ustav.pdf",
+   "bytes": 650107,
+   "sha256": "5f385e339fa4a42a85634ffc841ed062c2f0adb16e3155b0ace640bed3eabbc3"
+  },
+  {
+   "name": "Izmeneniya_v_ustav_02_08_19.pdf",
+   "bytes": 109104,
+   "sha256": "203eefcdcaea30a83790db4bf8731d0d8aad379348df5ce8a201f06a7923131b"
+  },
+  {
+   "name": "Izmeneniya_v_ustav_TUSURa_16.03.2020.pdf",
+   "bytes": 1907994,
+   "sha256": "671c5d5154f611726a372c5bb0ff47c868c8f367900efa09b1c7319d8657309f"
+  },
+  {
+   "name": "Kollektivnyi_dogovor_2024.pdf",
+   "bytes": 906146,
+   "sha256": "28e8b7b3e02ff4fbd80749cceb8b66a25899bc040666537f0654e7c9f7180a51"
+  },
+  {
+   "name": "Otchet_2023.pdf",
+   "bytes": 14486532,
+   "sha256": "257c6124c592cbaeee75bb0d369f7a8e6ca795877407fa347b23bacfd7b91675"
+  },
+  {
+   "name": "Otchet_o_rezulytatax_samoobsledovaniya_za_2024_god.pdf",
+   "bytes": 1553323,
+   "sha256": "d2260313fc5943fc851849cfd13fbb067af2a15dc84bd8110220e91cedd17219"
+  },
+  {
+   "name": "Otchet_o_rezulytatax_samoobsledovaniya_za_2024_god_Xarakteristika_OPOP.pdf",
+   "bytes": 23291258,
+   "sha256": "917931810580118e5d7c754397a501b6e0cd9b8372a0e357b747d69452b6613d"
+  },
+  {
+   "name": "Otchet_o_rezulytatax_samoobsledovaniya_za_2025_god.pdf",
+   "bytes": 1267126,
+   "sha256": "cc626be3d27ae18ec0aae0b1249de6aa04aad109e569d655366106fd4be19304"
+  },
+  {
+   "name": "Otchet_o_rezulytatax_samoobsledovaniya_za_2025_god_(xarakteristiki_OPOP).pdf",
+   "bytes": 27888496,
+   "sha256": "d700a2c3a528d1b063f2edc4aeeb0dab8463bc269b924fa8034af130a19d7f13"
+  },
+  {
+   "name": "Pologhenie_o_vnutrennei_sisteme_ocenki_kachestva_obrazovaniya.pdf",
+   "bytes": 598710,
+   "sha256": "25910f77dc51b160f2a1785b4e8934fa1da0279536edf25956e81ca96ebfb6c7"
+  },
+  {
+   "name": "Pologhenie_ob_otdele_normativnogo_obespecheniya.pdf",
+   "bytes": 435559,
+   "sha256": "441ec8780640c043fea7197d413815bde25ccd9d28fee5865b4c69882211f839"
+  },
+  {
+   "name": "Polozheniye_po_provedeniyu_tekushchego_kontrolya_uspevayemosti_i.pdf",
+   "bytes": 981746,
+   "sha256": "eceba189fdc512c6cfbfaacd6379ca3eece99ba4cf2be38524b88f17426a666d"
+  },
+  {
+   "name": "Poryadok_oformleniya_vozniknoveniya,_priostanovleniya_i_prekrascheniya_otnosheniy_meghdu_obrazovatelynoy_organizaciey_i_obuchayuschimisya.pdf",
+   "bytes": 582496,
+   "sha256": "dd8ffc73b4f2f91adfc2f968b1bdc9fed8505524855529e68f9ffb0db0bd7061"
+  },
+  {
+   "name": "Poryadok_perevoda_otchisleniya_i_vosstanovleniya_obuchayuschixsya_po_OP_VO_v_TUSURe.pdf",
+   "bytes": 647504,
+   "sha256": "365ec42aa4df82b8224498c3fffef2308c19f63f8c8cb5bf92f5d591ba03b444"
+  },
+  {
+   "name": "Pravila_priema_2026.pdf",
+   "bytes": 2301016,
+   "sha256": "1c20b64cf471a1ba3f8fdf5ae1b9b7e2bfe44f8db31cbd8ed88517363d78ae02"
+  },
+  {
+   "name": "Pravila_rasporyadka_02.11.2017_(1).pdf",
+   "bytes": 472695,
+   "sha256": "e8ecad9c07aa0e655ca8fc7d829df93e6538835a948bbe13738f64b167c0c88f"
+  },
+  {
+   "name": "Reghim_zanyatiy_obuchayuschixsya_ot_16.05.2019(1).pdf",
+   "bytes": 747614,
+   "sha256": "2a47992cc292869e3f1d69f0998ad1a895aa00dcf2213ef74fb18def21962f0d"
+  },
+  {
+   "name": "Ustav_2018.pdf",
+   "bytes": 1251858,
+   "sha256": "e1588823077e1c53a7f515be381ebc55c75829c309e51072c1212104ec05aff0"
+  },
+  {
+   "name": "Ustav_FGAOU_TUSUR_24(1).pdf",
+   "bytes": 12432735,
+   "sha256": "786bf4b618905de05910b6f4a7cbea83c7c947ae89f2f2cf24bafba120fca48b"
+  }
+ ]
+}
