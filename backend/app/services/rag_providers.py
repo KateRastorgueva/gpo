@@ -24,13 +24,18 @@ from sqlmodel import Session
 
 from app.core.config import settings
 from app.models import AppSetting, EngineDocument, get_datetime_utc
+from app.services import app_config
+from app.services.app_config import live_settings
 
 EXTERNAL_PROVIDERS = {"gemini_file_search", "anythingllm"}
 PROVIDER_LABELS = {
     "gemini_file_search": "Облако — Gemini File Search",
     "anythingllm": "Локально — AnythingLLM",
-    "legacy": "Встроенный поиск (Postgres + Qdrant)",
+    "legacy": "Встроенный поиск + генерация ответа (LLM)",
+    "search_only": "Только поиск, без генерации (лёгкий)",
 }
+# Не ходят во внешний сервис: встроенный поиск по базе знаний в Postgres.
+BUILTIN_PROVIDERS = {"legacy", "search_only"}
 PROVIDER_SETTING_KEY = "rag_provider"
 
 NO_ANSWER_MARKER = "НЕТ_ОТВЕТА"
@@ -90,24 +95,27 @@ def set_active_provider(session: Session, provider: str) -> None:
     row.updated_at = get_datetime_utc()
     session.add(row)
     session.commit()
+    app_config.invalidate_cache()
 
 
 def is_provider_configured(provider: str) -> bool:
     if provider == "gemini_file_search":
-        return bool(settings.gemini_api_key and settings.GEMINI_FILE_SEARCH_STORE)
+        return bool(
+            live_settings.gemini_api_key and live_settings.GEMINI_FILE_SEARCH_STORE
+        )
     if provider == "anythingllm":
-        return bool(settings.ANYTHINGLLM_API_KEY)
-    return provider == "legacy"
+        return bool(live_settings.ANYTHINGLLM_API_KEY)
+    return provider in BUILTIN_PROVIDERS
 
 
 def is_external_provider_enabled(provider: str | None = None) -> bool:
-    return (provider or settings.RAG_PROVIDER) in EXTERNAL_PROVIDERS
+    return (provider or live_settings.RAG_PROVIDER) in EXTERNAL_PROVIDERS
 
 
 def ask_provider(question: str, provider: str | None = None) -> ProviderAnswer:
     """Отправляет вопрос во внешний движок (по умолчанию — ``RAG_PROVIDER``)."""
 
-    provider = provider or settings.RAG_PROVIDER
+    provider = provider or live_settings.RAG_PROVIDER
     if provider == "gemini_file_search":
         return ask_gemini_file_search(question)
     if provider == "anythingllm":
@@ -124,10 +132,10 @@ def _is_no_answer(text: str) -> bool:
 
 
 def ask_gemini_file_search(question: str) -> ProviderAnswer:
-    api_key = settings.gemini_api_key
+    api_key = live_settings.gemini_api_key
     if not api_key:
         raise RuntimeError("GEMINI_API_KEY is not configured")
-    if not settings.GEMINI_FILE_SEARCH_STORE:
+    if not live_settings.GEMINI_FILE_SEARCH_STORE:
         raise RuntimeError("GEMINI_FILE_SEARCH_STORE is not configured")
 
     payload = {
@@ -136,8 +144,8 @@ def ask_gemini_file_search(question: str) -> ProviderAnswer:
         "tools": [
             {
                 "fileSearch": {
-                    "fileSearchStoreNames": [settings.GEMINI_FILE_SEARCH_STORE],
-                    "topK": settings.GEMINI_FILE_SEARCH_TOP_K,
+                    "fileSearchStoreNames": [live_settings.GEMINI_FILE_SEARCH_STORE],
+                    "topK": live_settings.GEMINI_FILE_SEARCH_TOP_K,
                 }
             }
         ],
@@ -146,11 +154,13 @@ def ask_gemini_file_search(question: str) -> ProviderAnswer:
     # Список моделей через запятую: при перегрузке (503/429) или снятой с
     # поддержки модели (404) пробуем следующую, а не сразу зовём оператора.
     models = [
-        m.strip() for m in settings.GEMINI_FILE_SEARCH_MODEL.split(",") if m.strip()
+        m.strip()
+        for m in live_settings.GEMINI_FILE_SEARCH_MODEL.split(",")
+        if m.strip()
     ]
-    with httpx.Client(timeout=settings.RAG_PROVIDER_TIMEOUT_SECONDS) as client:
+    with httpx.Client(timeout=live_settings.RAG_PROVIDER_TIMEOUT_SECONDS) as client:
         for index, model in enumerate(models):
-            url = f"{settings.GOOGLE_API_URL}/models/{model}:generateContent"
+            url = f"{live_settings.GOOGLE_API_URL}/models/{model}:generateContent"
             response = client.post(
                 url, headers={"X-goog-api-key": api_key}, json=payload
             )
@@ -216,15 +226,15 @@ def parse_gemini_response(body: dict) -> ProviderAnswer:  # type: ignore[type-ar
 
 
 def ask_anythingllm(question: str) -> ProviderAnswer:
-    if not settings.ANYTHINGLLM_API_KEY:
+    if not live_settings.ANYTHINGLLM_API_KEY:
         raise RuntimeError("ANYTHINGLLM_API_KEY is not configured")
     url = (
-        f"{settings.ANYTHINGLLM_BASE_URL.rstrip('/')}/api/v1/workspace/"
-        f"{settings.ANYTHINGLLM_WORKSPACE}/chat"
+        f"{live_settings.ANYTHINGLLM_BASE_URL.rstrip('/')}/api/v1/workspace/"
+        f"{live_settings.ANYTHINGLLM_WORKSPACE}/chat"
     )
-    headers = {"Authorization": f"Bearer {settings.ANYTHINGLLM_API_KEY}"}
+    headers = {"Authorization": f"Bearer {live_settings.ANYTHINGLLM_API_KEY}"}
     payload = {"message": question, "mode": "query"}
-    with httpx.Client(timeout=settings.RAG_PROVIDER_TIMEOUT_SECONDS) as client:
+    with httpx.Client(timeout=live_settings.RAG_PROVIDER_TIMEOUT_SECONDS) as client:
         response = client.post(url, headers=headers, json=payload)
         response.raise_for_status()
         body = response.json()
@@ -276,17 +286,17 @@ GEMINI_POLL_SECONDS = 3.0
 
 def _gemini_upload_base() -> str:
     # https://host/v1beta -> https://host/upload/v1beta
-    url = httpx.URL(settings.GOOGLE_API_URL)
+    url = httpx.URL(live_settings.GOOGLE_API_URL)
     return f"{url.scheme}://{url.netloc.decode()}/upload{url.path.rstrip('/')}"
 
 
 def _require_gemini() -> tuple[str, str]:
-    api_key = settings.gemini_api_key
+    api_key = live_settings.gemini_api_key
     if not api_key:
         raise RuntimeError("GEMINI_API_KEY is not configured")
-    if not settings.GEMINI_FILE_SEARCH_STORE:
+    if not live_settings.GEMINI_FILE_SEARCH_STORE:
         raise RuntimeError("GEMINI_FILE_SEARCH_STORE is not configured")
-    return api_key, settings.GEMINI_FILE_SEARCH_STORE
+    return api_key, live_settings.GEMINI_FILE_SEARCH_STORE
 
 
 def list_gemini_documents(client: httpx.Client | None = None) -> list[EngineDocument]:
@@ -301,7 +311,7 @@ def list_gemini_documents(client: httpx.Client | None = None) -> list[EngineDocu
             if token:
                 params["pageToken"] = token
             response = client.get(
-                f"{settings.GOOGLE_API_URL}/{store}/documents",
+                f"{live_settings.GOOGLE_API_URL}/{store}/documents",
                 headers={"X-goog-api-key": api_key},
                 params=params,
             )
@@ -336,7 +346,7 @@ def upload_gemini_document(
     """Resumable-загрузка в File Search store — тот же протокол, что у SDK google-genai."""
     api_key, store = _require_gemini()
     own = client is None
-    client = client or httpx.Client(timeout=settings.RAG_PROVIDER_TIMEOUT_SECONDS)
+    client = client or httpx.Client(timeout=live_settings.RAG_PROVIDER_TIMEOUT_SECONDS)
     try:
         if existing is None:
             existing = {d.name for d in list_gemini_documents(client)}
@@ -374,7 +384,7 @@ def upload_gemini_document(
                 raise RuntimeError("Gemini indexing timed out")
             time.sleep(GEMINI_POLL_SECONDS)
             poll = client.get(
-                f"{settings.GOOGLE_API_URL}/{operation['name']}",
+                f"{live_settings.GOOGLE_API_URL}/{operation['name']}",
                 headers={"X-goog-api-key": api_key},
             )
             poll.raise_for_status()
@@ -390,11 +400,11 @@ def upload_gemini_document(
 
 
 def _anythingllm_client() -> httpx.Client:
-    if not settings.ANYTHINGLLM_API_KEY:
+    if not live_settings.ANYTHINGLLM_API_KEY:
         raise RuntimeError("ANYTHINGLLM_API_KEY is not configured")
     return httpx.Client(
-        base_url=f"{settings.ANYTHINGLLM_BASE_URL.rstrip('/')}/api/v1",
-        headers={"Authorization": f"Bearer {settings.ANYTHINGLLM_API_KEY}"},
+        base_url=f"{live_settings.ANYTHINGLLM_BASE_URL.rstrip('/')}/api/v1",
+        headers={"Authorization": f"Bearer {live_settings.ANYTHINGLLM_API_KEY}"},
         timeout=900,
     )
 
@@ -417,7 +427,7 @@ def list_anythingllm_documents(
     own = client is None
     client = client or _anythingllm_client()
     try:
-        response = client.get(f"/workspace/{settings.ANYTHINGLLM_WORKSPACE}")
+        response = client.get(f"/workspace/{live_settings.ANYTHINGLLM_WORKSPACE}")
         response.raise_for_status()
         workspace = response.json().get("workspace") or []
         if isinstance(workspace, dict):
@@ -457,7 +467,7 @@ def upload_anythingllm_document(
         if not locations or words == 0:
             return "no-text"
         client.post(
-            f"/workspace/{settings.ANYTHINGLLM_WORKSPACE}/update-embeddings",
+            f"/workspace/{live_settings.ANYTHINGLLM_WORKSPACE}/update-embeddings",
             json={"adds": locations, "deletes": []},
         ).raise_for_status()
         existing.add(filename)

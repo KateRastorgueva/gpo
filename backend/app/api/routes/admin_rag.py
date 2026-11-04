@@ -23,11 +23,12 @@ from app.models import (
     IngestJobCreate,
     IngestJobPublic,
     IngestJobsPublic,
+    KnowledgeChunk,
     RagProviderOption,
     RagProviderPublic,
     RagProviderUpdate,
 )
-from app.services import rag_ingest, rag_providers
+from app.services import dense_local, rag_ingest, rag_providers
 
 router = APIRouter(prefix="/admin/rag", tags=["admin-rag"])
 
@@ -65,10 +66,29 @@ def set_rag_provider(session: SessionDep, body: RagProviderUpdate) -> Any:
     if not rag_providers.is_provider_configured(body.provider):
         raise HTTPException(
             status_code=400,
-            detail=f"Движок {body.provider} не настроен: нет ключа или хранилища в .env",
+            detail=f"Движок {body.provider} не настроен: нет ключа или хранилища (Управление → Настройки)",
         )
     rag_providers.set_active_provider(session, body.provider)
     return _provider_public(session)
+
+
+@router.get(
+    "/dense-status",
+    dependencies=[Depends(require_permission(KNOWLEDGE_READ))],
+)
+def get_dense_status(session: SessionDep) -> Any:
+    """Состояние лёгкой векторной добавки: есть ли модель, сколько векторов в кэше."""
+
+    from app.services.app_config import live_settings
+
+    chunks = session.exec(select(func.count()).select_from(KnowledgeChunk)).one()
+    if live_settings.DENSE_SEARCH_ENABLED:
+        dense_local.get_cache()  # загружает модель, чтобы показать число векторов
+    return {
+        "enabled": bool(live_settings.DENSE_SEARCH_ENABLED),
+        "chunks": chunks,
+        **dense_local.status(),
+    }
 
 
 @router.get(
@@ -109,7 +129,11 @@ def list_engine_documents(engine: Literal["gemini", "anythingllm"]) -> Any:
 def create_ingest_job(
     session: SessionDep, current_user: CurrentUser, body: IngestJobCreate
 ) -> Any:
-    engines = {"gemini": ("gemini_file_search",), "anythingllm": ("anythingllm",)}
+    engines: dict[str, tuple[str, ...]] = {
+        "gemini": ("gemini_file_search",),
+        "anythingllm": ("anythingllm",),
+        "local": (),  # встроенная база знаний всегда доступна
+    }
     needed = engines.get(body.target, ("gemini_file_search", "anythingllm"))
     missing = [p for p in needed if not rag_providers.is_provider_configured(p)]
     if missing:

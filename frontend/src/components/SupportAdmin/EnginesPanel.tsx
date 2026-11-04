@@ -45,6 +45,7 @@ const TARGET_LABELS: Record<IngestTarget, string> = {
   both: "Оба движка",
   gemini: "Только Gemini (облако)",
   anythingllm: "Только AnythingLLM (локально)",
+  local: "Встроенная база (для «Только поиск»)",
 }
 
 const ENGINE_STATUS: Record<
@@ -118,7 +119,11 @@ function ProviderCard({ canWrite }: { canWrite: boolean }) {
               key={option.name}
               variant={state.active === option.name ? "default" : "outline"}
               disabled={!canWrite || !option.configured || mutation.isPending}
-              title={option.configured ? undefined : "Не настроен в .env"}
+              title={
+                option.configured
+                  ? undefined
+                  : "Не настроен: задайте ключ во вкладке «Настройки»"
+              }
               onClick={() => mutation.mutate(option.name)}
             >
               {option.label}
@@ -216,7 +221,9 @@ function UploadCard({ onStarted }: { onStarted: () => void }) {
         <p className="text-xs text-muted-foreground">
           Gemini распознаёт сканы сам (OCR). AnythingLLM берёт только текстовый
           слой — у сканов будет статус «нет текста». Файлы с тем же именем, что
-          уже есть в движке, пропускаются.
+          уже есть в движке, пропускаются. Встроенная база (Postgres) берёт
+          текстовый слой PDF, а также .txt/.md/.html; файл с тем же именем
+          заменяется новой версией.
         </p>
         <div className="flex items-center gap-3">
           <LoadingButton
@@ -283,6 +290,7 @@ function JobCard({ job }: { job: IngestJob }) {
                 <TableHead>Статус</TableHead>
                 <TableHead>Gemini</TableHead>
                 <TableHead>AnythingLLM</TableHead>
+                <TableHead>Встроенная</TableHead>
                 <TableHead>Ошибка</TableHead>
               </TableRow>
             </TableHeader>
@@ -299,6 +307,9 @@ function JobCard({ job }: { job: IngestJob }) {
                   </TableCell>
                   <TableCell>
                     <EngineStatus status={item.anythingllm_status} />
+                  </TableCell>
+                  <TableCell>
+                    <EngineStatus status={item.local_status} />
                   </TableCell>
                   <TableCell className="max-w-[320px] whitespace-pre-wrap text-xs text-destructive">
                     {item.error}
@@ -355,7 +366,7 @@ function EngineDocumentsCard() {
           <p className="text-sm text-muted-foreground">Загрузка списка...</p>
         ) : null}
         {docs && !docs.configured ? (
-          <EmptyState text="Движок не настроен в .env" />
+          <EmptyState text="Движок не настроен: задайте ключ во вкладке «Настройки»" />
         ) : null}
         {docs?.error ? (
           <p className="text-sm text-destructive">{docs.error}</p>

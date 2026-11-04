@@ -1,8 +1,10 @@
 from fastapi import APIRouter
 
 from app.api.routes import (
+    admin_intent,
     admin_logs,
     admin_rag,
+    admin_settings,
     admin_support,
     items,
     login,
@@ -21,7 +23,9 @@ api_router.include_router(items.router)
 api_router.include_router(support.router)
 api_router.include_router(admin_support.router)
 api_router.include_router(admin_rag.router)
+api_router.include_router(admin_settings.router)
 api_router.include_router(admin_logs.router)
+api_router.include_router(admin_intent.router)
 
 
 if settings.ENVIRONMENT == "local":

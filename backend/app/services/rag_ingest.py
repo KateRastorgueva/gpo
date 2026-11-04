@@ -42,7 +42,16 @@ TARGET_ENGINES = {
     "gemini": ("gemini",),
     "anythingllm": ("anythingllm",),
     "both": ("gemini", "anythingllm"),
+    # Встроенная база знаний в Postgres: для режимов legacy и search_only.
+    "local": ("local",),
 }
+
+
+def _upload_local(session: Session, filename: str, data: bytes) -> str:
+    # Импорт здесь: support_service тяжёлый и сам импортирует rag_providers.
+    from app.services import support_service
+
+    return support_service.ingest_local_file(session, filename, data)
 
 
 def _item_path(item_id: uuid.UUID) -> Path:
@@ -98,21 +107,29 @@ def _process_item(session: Session, item: IngestItem, target: str) -> None:
         return
     mime_type = mimetypes.guess_type(item.filename)[0] or "application/octet-stream"
 
+    statuses: dict[str, str] = {}
     for engine_name in TARGET_ENGINES[target]:
-        upload = (
-            rag_providers.upload_gemini_document
-            if engine_name == "gemini"
-            else rag_providers.upload_anythingllm_document
-        )
         try:
-            status = upload(item.filename, data, mime_type)
+            if engine_name == "local":
+                status = _upload_local(session, item.filename, data)
+            elif engine_name == "gemini":
+                status = rag_providers.upload_gemini_document(
+                    item.filename, data, mime_type
+                )
+            else:
+                status = rag_providers.upload_anythingllm_document(
+                    item.filename, data, mime_type
+                )
         except Exception as exc:  # noqa: BLE001 — ошибка движка уходит в статус файла
+            session.rollback()
             logger.warning(
                 "Ingest %s -> %s failed: %s", item.filename, engine_name, exc
             )
             status = "error"
             errors.append(f"{engine_name}: {type(exc).__name__}: {exc}"[:600])
-        setattr(item, f"{engine_name}_status", status)
+        statuses[engine_name] = status
+        if engine_name != "local":
+            setattr(item, f"{engine_name}_status", status)
 
     item.status = "failed" if errors else "done"
     item.error = "\n".join(errors)[:2000] or None
@@ -126,10 +143,7 @@ def _process_item(session: Session, item: IngestItem, target: str) -> None:
         bytes=len(data),
         target=target,
         status=item.status,
-        engines={
-            name: getattr(item, f"{name}_status", None)
-            for name in TARGET_ENGINES[target]
-        },
+        engines=statuses,
         error=item.error,
         wait_ms=_ms_between(item.created_at, item.finished_at),
     )
@@ -222,5 +236,12 @@ def job_public(session: Session, job: IngestJob) -> IngestJobPublic:
         finished=remaining <= 0,
         eta_seconds=eta,
         created_at=job.created_at,
-        items=[IngestItemPublic.model_validate(i, from_attributes=True) for i in items],
+        items=[_item_public(job, i) for i in items],
     )
+
+
+def _item_public(job: IngestJob, item: IngestItem) -> IngestItemPublic:
+    public = IngestItemPublic.model_validate(item, from_attributes=True)
+    if job.target == "local":
+        public.local_status = {"done": "ok", "failed": "error"}.get(item.status)
+    return public
