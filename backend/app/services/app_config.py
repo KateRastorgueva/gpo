@@ -108,7 +108,7 @@ GROUPS: tuple[GroupSpec, ...] = (
     ),
 )
 
-_PROVIDERS = ("legacy", "gemini_file_search", "anythingllm")
+_PROVIDERS = ("legacy", "search_only", "gemini_file_search", "anythingllm")
 
 SPECS: tuple[SettingSpec, ...] = (
     SettingSpec(
@@ -117,9 +117,21 @@ SPECS: tuple[SettingSpec, ...] = (
         "provider",
         "Активный движок",
         "choice",
-        "legacy — встроенный поиск; gemini_file_search — облако; anythingllm — локально.",
+        "legacy — встроенный поиск + LLM; search_only — встроенный поиск без LLM "
+        "(найденные фрагменты с источниками); gemini_file_search — облако; "
+        "anythingllm — локально.",
         choices=_PROVIDERS,
         db_key="rag_provider",
+    ),
+    SettingSpec(
+        "VECTOR_SEARCH_ENABLED",
+        "rag",
+        "vectorSearch",
+        "Векторный поиск (Qdrant)",
+        "bool",
+        "Только для встроенного поиска. Выключен — BM25 по Postgres, без Qdrant и "
+        "модели embeddings. Включайте, если запущен контейнер qdrant "
+        "(docker compose --profile qdrant), затем «Переиндексировать».",
     ),
     SettingSpec(
         "RAG_PROVIDER_TIMEOUT_SECONDS",
@@ -222,6 +234,17 @@ SPECS: tuple[SettingSpec, ...] = (
         "ragTopScore",
         "Порог лучшего фрагмента",
         "float",
+        minimum=0,
+        maximum=1,
+    ),
+    SettingSpec(
+        "RAG_TOP_SCORE_THRESHOLD_HASHED",
+        "routing",
+        "ragTopScoreLexical",
+        "Порог лучшего фрагмента без векторов (BM25)",
+        "float",
+        "Доля слов вопроса, найденных в лучшем фрагменте. Действует, когда "
+        "векторный поиск выключен. Ниже порога — вопрос уходит оператору.",
         minimum=0,
         maximum=1,
     ),

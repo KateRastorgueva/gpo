@@ -48,7 +48,7 @@ def test_provider_toggle_is_persisted(
     )
     assert r.json()["active"] == "gemini_file_search"
     names = {o["name"] for o in r.json()["options"]}
-    assert names == {"gemini_file_search", "anythingllm", "legacy"}
+    assert names == {"gemini_file_search", "anythingllm", "legacy", "search_only"}
 
 
 def test_provider_toggle_requires_admin(

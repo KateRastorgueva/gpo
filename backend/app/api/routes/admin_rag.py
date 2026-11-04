@@ -109,7 +109,11 @@ def list_engine_documents(engine: Literal["gemini", "anythingllm"]) -> Any:
 def create_ingest_job(
     session: SessionDep, current_user: CurrentUser, body: IngestJobCreate
 ) -> Any:
-    engines = {"gemini": ("gemini_file_search",), "anythingllm": ("anythingllm",)}
+    engines: dict[str, tuple[str, ...]] = {
+        "gemini": ("gemini_file_search",),
+        "anythingllm": ("anythingllm",),
+        "local": (),  # встроенная база знаний всегда доступна
+    }
     needed = engines.get(body.target, ("gemini_file_search", "anythingllm"))
     missing = [p for p in needed if not rag_providers.is_provider_configured(p)]
     if missing:

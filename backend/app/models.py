@@ -958,8 +958,8 @@ class MyQueuePublic(SQLModel):
 
 # --------------------------- внешние RAG-движки ---------------------------
 
-RagProviderName = Literal["legacy", "gemini_file_search", "anythingllm"]
-IngestTarget = Literal["gemini", "anythingllm", "both"]
+RagProviderName = Literal["legacy", "search_only", "gemini_file_search", "anythingllm"]
+IngestTarget = Literal["gemini", "anythingllm", "both", "local"]
 
 
 class AppSetting(SQLModel, table=True):
@@ -1052,6 +1052,8 @@ class IngestItemPublic(SQLModel):
     status: str
     gemini_status: str | None = None
     anythingllm_status: str | None = None
+    # Встроенная база знаний (Postgres): своей колонки нет, выводится из status.
+    local_status: str | None = None
     error: str | None = None
     started_at: datetime | None = None
     finished_at: datetime | None = None

@@ -587,8 +587,12 @@ export const getSupportMetrics = () =>
 
 /* ---------------------------- внешние RAG-движки --------------------------- */
 
-export type RagProviderName = "gemini_file_search" | "anythingllm" | "legacy"
-export type IngestTarget = "gemini" | "anythingllm" | "both"
+export type RagProviderName =
+  | "gemini_file_search"
+  | "anythingllm"
+  | "legacy"
+  | "search_only"
+export type IngestTarget = "gemini" | "anythingllm" | "both" | "local"
 export type RagEngine = "gemini" | "anythingllm"
 
 export type RagProviderState = {
@@ -604,6 +608,7 @@ export type IngestItem = {
   status: "queued" | "running" | "done" | "failed"
   gemini_status?: string | null
   anythingllm_status?: string | null
+  local_status?: string | null
   error?: string | null
   started_at?: string | null
   finished_at?: string | null

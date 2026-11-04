@@ -103,7 +103,8 @@ class Settings(BaseSettings):
     GEMINI_API_KEY: str | None = None
 
     # Какой движок отвечает после промаха FAQ:
-    # legacy (собственный поиск Postgres + Qdrant) | gemini_file_search | anythingllm.
+    # legacy (собственный поиск + LLM) | search_only (собственный поиск без LLM:
+    # пользователю показываются найденные фрагменты) | gemini_file_search | anythingllm.
     RAG_PROVIDER: str = "legacy"
     GEMINI_FILE_SEARCH_STORE: str | None = None
     # Модели по порядку предпочтения, через запятую.
@@ -132,6 +133,12 @@ class Settings(BaseSettings):
     OLLAMA_MODEL: str = "llama3.1:8b"
     OLLAMA_TIMEOUT_SECONDS: int = 30
 
+    # Векторный слой встроенного поиска (Qdrant + embeddings). Выключен — поиск
+    # идёт только BM25 по чанкам в Postgres: не нужны ни контейнер Qdrant, ни
+    # модель embeddings. При встроенном hashed-эмбеддере Qdrant качества почти не
+    # добавляет, поэтому по умолчанию он выключен (docs/laptop-search-only.md).
+    VECTOR_SEARCH_ENABLED: bool = False
+
     QDRANT_HOST: str = "qdrant"
     QDRANT_PORT: int = 6333
     QDRANT_API_KEY: str | None = None
@@ -153,7 +160,11 @@ class Settings(BaseSettings):
     # Score scales differ per embedding backend: the char-n-gram fallback never
     # reaches the thresholds tuned for sentence-transformers. Calibrated with
     # scripts/calibrate_routing.py, see docs/reviews/2026-10-07-doc-pipeline-review.md.
-    RAG_TOP_SCORE_THRESHOLD_HASHED: float = 0.25
+    # Покрытие запроса лучшим чанком (BM25 без векторов или hashed-эмбеддинги).
+    # 0.5 вместо прежних 0.25: на 49 документах ТУСУР посторонние вопросы
+    # («рецепт борща», «чемпионат мира») набирали 0.2–0.46 и получали «ответ»,
+    # а верные находки — от 0.51 (docs/laptop-search-only.md, раздел «Замеры»).
+    RAG_TOP_SCORE_THRESHOLD_HASHED: float = 0.5
     RAG_RELEVANT_CHUNK_THRESHOLD_HASHED: float = 0.25
     RAG_MIN_RELEVANT_CHUNKS_HASHED: int = 1
     CRITICAL_CONFIDENCE_THRESHOLD: float = 0.80

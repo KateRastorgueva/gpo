@@ -19,7 +19,11 @@ services:
       - POSTGRES_USER=${POSTGRES_USER?Variable not set}
       - POSTGRES_DB=${POSTGRES_DB?Variable not set}
 
+  # Векторный слой встроенного поиска. По умолчанию не запускается: поиск идёт
+  # BM25 по Postgres (VECTOR_SEARCH_ENABLED=false). Включить:
+  #   docker compose --profile qdrant up -d  и  VECTOR_SEARCH_ENABLED=true
   qdrant:
+    profiles: ["qdrant"]
     image: qdrant/qdrant:v1.14.1
     restart: always
     volumes:
@@ -100,6 +104,7 @@ services:
         restart: true
       qdrant:
         condition: service_started
+        required: false
       prestart:
         condition: service_completed_successfully
     env_file:

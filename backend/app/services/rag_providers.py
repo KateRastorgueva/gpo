@@ -31,8 +31,11 @@ EXTERNAL_PROVIDERS = {"gemini_file_search", "anythingllm"}
 PROVIDER_LABELS = {
     "gemini_file_search": "Облако — Gemini File Search",
     "anythingllm": "Локально — AnythingLLM",
-    "legacy": "Встроенный поиск (Postgres + Qdrant)",
+    "legacy": "Встроенный поиск + генерация ответа (LLM)",
+    "search_only": "Только поиск, без генерации (лёгкий)",
 }
+# Не ходят во внешний сервис: встроенный поиск по базе знаний в Postgres.
+BUILTIN_PROVIDERS = {"legacy", "search_only"}
 PROVIDER_SETTING_KEY = "rag_provider"
 
 NO_ANSWER_MARKER = "НЕТ_ОТВЕТА"
@@ -102,7 +105,7 @@ def is_provider_configured(provider: str) -> bool:
         )
     if provider == "anythingllm":
         return bool(live_settings.ANYTHINGLLM_API_KEY)
-    return provider == "legacy"
+    return provider in BUILTIN_PROVIDERS
 
 
 def is_external_provider_enabled(provider: str | None = None) -> bool:
