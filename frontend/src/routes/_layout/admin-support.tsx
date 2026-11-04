@@ -147,7 +147,13 @@ function AdminSupportPage() {
       >
         <TabsList className="flex h-auto w-full flex-wrap justify-start gap-1">
           {availableTabs.map((tab) => (
-            <TabsTrigger key={tab.value} value={tab.value}>
+            <TabsTrigger
+              key={tab.value}
+              value={tab.value}
+              // Без этого первая строка вкладок растягивается на всю высоту
+              // списка, а вторая уезжает под содержимое и не кликается.
+              className="h-8 flex-none"
+            >
               {tab.label}
             </TabsTrigger>
           ))}
