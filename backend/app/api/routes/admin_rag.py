@@ -65,7 +65,7 @@ def set_rag_provider(session: SessionDep, body: RagProviderUpdate) -> Any:
     if not rag_providers.is_provider_configured(body.provider):
         raise HTTPException(
             status_code=400,
-            detail=f"Движок {body.provider} не настроен: нет ключа или хранилища в .env",
+            detail=f"Движок {body.provider} не настроен: нет ключа или хранилища (Управление → Настройки)",
         )
     rag_providers.set_active_provider(session, body.provider)
     return _provider_public(session)

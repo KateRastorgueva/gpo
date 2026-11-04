@@ -118,7 +118,11 @@ function ProviderCard({ canWrite }: { canWrite: boolean }) {
               key={option.name}
               variant={state.active === option.name ? "default" : "outline"}
               disabled={!canWrite || !option.configured || mutation.isPending}
-              title={option.configured ? undefined : "Не настроен в .env"}
+              title={
+                option.configured
+                  ? undefined
+                  : "Не настроен: задайте ключ во вкладке «Настройки»"
+              }
               onClick={() => mutation.mutate(option.name)}
             >
               {option.label}
@@ -355,7 +359,7 @@ function EngineDocumentsCard() {
           <p className="text-sm text-muted-foreground">Загрузка списка...</p>
         ) : null}
         {docs && !docs.configured ? (
-          <EmptyState text="Движок не настроен в .env" />
+          <EmptyState text="Движок не настроен: задайте ключ во вкладке «Настройки»" />
         ) : null}
         {docs?.error ? (
           <p className="text-sm text-destructive">{docs.error}</p>

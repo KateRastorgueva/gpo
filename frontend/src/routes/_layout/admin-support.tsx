@@ -9,6 +9,7 @@ import { KnowledgePanel } from "@/components/SupportAdmin/KnowledgePanel"
 import { MetricsPanel } from "@/components/SupportAdmin/MetricsPanel"
 import { RequestsPanel } from "@/components/SupportAdmin/RequestsPanel"
 import { SearchPanel } from "@/components/SupportAdmin/SearchPanel"
+import { SettingsPanel } from "@/components/SupportAdmin/SettingsPanel"
 import { TaxonomyPanel } from "@/components/SupportAdmin/TaxonomyPanel"
 import { TicketsPanel } from "@/components/SupportAdmin/TicketsPanel"
 import { UsersPanel } from "@/components/SupportAdmin/UsersPanel"
@@ -103,6 +104,12 @@ const TABS: TabDefinition[] = [
     label: "Пользователи",
     permission: PERMISSIONS.USER_MANAGE,
     render: () => <UsersPanel />,
+  },
+  {
+    value: "settings",
+    label: "Настройки",
+    permission: PERMISSIONS.SETTINGS_MANAGE,
+    render: () => <SettingsPanel />,
   },
 ]
 

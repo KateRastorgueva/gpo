@@ -73,6 +73,7 @@ from app.models import (
     User,
 )
 from app.services import rag_providers
+from app.services.app_config import live_settings
 
 CRITICAL_KEYWORDS = (
     "срок",
@@ -512,7 +513,7 @@ def get_embedding_backend() -> str:
     if configured == "auto":
         if _get_sentence_transformer() is not None:
             configured = "sentence-transformers"
-        elif settings.GOOGLE_API_KEY and settings.GOOGLE_EMBEDDING_MODEL.strip():
+        elif live_settings.GOOGLE_API_KEY and settings.GOOGLE_EMBEDDING_MODEL.strip():
             configured = "google"
         else:
             configured = "hashed"
@@ -580,19 +581,19 @@ def _resize_vector(vector: list[float], size: int) -> list[float]:
 def _embed_with_google(text: str) -> list[float] | None:
     """Получает embedding текста через Google API, если ключ настроен."""
 
-    if not settings.GOOGLE_API_KEY:
+    if not live_settings.GOOGLE_API_KEY:
         return None
     embedding_model = settings.GOOGLE_EMBEDDING_MODEL.strip()
     if not embedding_model:
         return None
     if not embedding_model.startswith("models/"):
         embedding_model = f"models/{embedding_model}"
-    url = f"{settings.GOOGLE_API_URL}/{embedding_model}:embedContent"
+    url = f"{live_settings.GOOGLE_API_URL}/{embedding_model}:embedContent"
     payload = {
         "model": embedding_model,
         "content": {"parts": [{"text": text}]},
     }
-    headers = {"X-goog-api-key": settings.GOOGLE_API_KEY}
+    headers = {"X-goog-api-key": live_settings.GOOGLE_API_KEY}
     try:
         with httpx.Client(timeout=settings.QDRANT_TIMEOUT_SECONDS) as client:
             response = client.post(url, headers=headers, json=payload)
@@ -1198,7 +1199,7 @@ def rerank_results(
             )
         )
     reranked.sort(key=lambda item: item.score, reverse=True)
-    return reranked[: settings.RETRIEVAL_TOP_K]
+    return reranked[: live_settings.RETRIEVAL_TOP_K]
 
 
 RAG_EXTRA_STOPWORDS = frozenset(
@@ -1343,7 +1344,7 @@ def _rrf_merge(
                 score=_clamp_score(score),
             )
         )
-    return merged[: settings.RETRIEVAL_TOP_K]
+    return merged[: live_settings.RETRIEVAL_TOP_K]
 
 
 _NEGATION_WORDS = ("не", "нельзя", "нет")
@@ -1440,13 +1441,13 @@ def _build_prompt(question: str, results: list[RetrievalResult]) -> str:
 def _generate_with_google(prompt: str) -> str:
     """Генерирует ответ через Google Generative Language API."""
 
-    api_key = settings.gemini_api_key
+    api_key = live_settings.gemini_api_key
     if not api_key:
         raise RuntimeError("GEMINI_API_KEY is not configured")
-    url = f"{settings.GOOGLE_API_URL}/models/{settings.GOOGLE_MODEL}:generateContent"
+    url = f"{live_settings.GOOGLE_API_URL}/models/{live_settings.GOOGLE_MODEL}:generateContent"
     payload = {"contents": [{"parts": [{"text": prompt}]}]}
     headers = {"X-goog-api-key": api_key}
-    with httpx.Client(timeout=settings.OLLAMA_TIMEOUT_SECONDS) as client:
+    with httpx.Client(timeout=live_settings.OLLAMA_TIMEOUT_SECONDS) as client:
         response = client.post(url, headers=headers, json=payload)
         response.raise_for_status()
         body = response.json()
@@ -1465,13 +1466,13 @@ def _generate_with_google(prompt: str) -> str:
 def _generate_with_ollama(prompt: str) -> str:
     """Генерирует ответ через локальный или удаленный Ollama API."""
 
-    url = f"{settings.OLLAMA_BASE_URL.rstrip('/')}/api/generate"
+    url = f"{live_settings.OLLAMA_BASE_URL.rstrip('/')}/api/generate"
     payload = {
-        "model": settings.OLLAMA_MODEL,
+        "model": live_settings.OLLAMA_MODEL,
         "prompt": prompt,
         "stream": False,
     }
-    with httpx.Client(timeout=settings.OLLAMA_TIMEOUT_SECONDS) as client:
+    with httpx.Client(timeout=live_settings.OLLAMA_TIMEOUT_SECONDS) as client:
         response = client.post(url, json=payload)
         response.raise_for_status()
         body = response.json()
@@ -1650,9 +1651,9 @@ def routing_thresholds() -> tuple[float, float, int]:
             settings.RAG_MIN_RELEVANT_CHUNKS_HASHED,
         )
     return (
-        settings.RAG_TOP_SCORE_THRESHOLD,
-        settings.RAG_RELEVANT_CHUNK_THRESHOLD,
-        settings.RAG_MIN_RELEVANT_CHUNKS,
+        live_settings.RAG_TOP_SCORE_THRESHOLD,
+        live_settings.RAG_RELEVANT_CHUNK_THRESHOLD,
+        live_settings.RAG_MIN_RELEVANT_CHUNKS,
     )
 
 
@@ -1709,7 +1710,7 @@ def _run_external_rag(
             snippet=item.snippet,
             score=item.score,
         )
-        for item in result.sources[: settings.RETRIEVAL_TOP_K]
+        for item in result.sources[: live_settings.RETRIEVAL_TOP_K]
     ]
     confidence = _clamp_score(result.confidence)
     decision_metrics = DecisionMetrics(
@@ -1733,7 +1734,7 @@ def _run_external_rag(
             decision_metrics=decision_metrics,
         )
 
-    if critical and confidence < settings.CRITICAL_CONFIDENCE_THRESHOLD:
+    if critical and confidence < live_settings.CRITICAL_CONFIDENCE_THRESHOLD:
         return _record(
             mode="operator",
             confidence=confidence,
@@ -1749,7 +1750,9 @@ def _run_external_rag(
     answer_text = result.answer
     if (
         not critical
-        and settings.LOW_CONFIDENCE_MIN <= confidence <= settings.LOW_CONFIDENCE_MAX
+        and live_settings.LOW_CONFIDENCE_MIN
+        <= confidence
+        <= live_settings.LOW_CONFIDENCE_MAX
     ):
         answer_text = (
             f"{answer_text}\n\nТребуется проверка актуальности по указанным источникам."
@@ -1777,7 +1780,7 @@ def run_support_pipeline(
     faq_match, faq_score = find_faq_match(session, payload.question)
     critical = is_critical_question(payload.question)
 
-    if faq_match and faq_score >= settings.FAQ_SIMILARITY_THRESHOLD:
+    if faq_match and faq_score >= live_settings.FAQ_SIMILARITY_THRESHOLD:
         faq_source = SourceAttribution(
             source_id=faq_match.id,
             source_title="FAQ",
@@ -1885,7 +1888,7 @@ def run_support_pipeline(
         )
 
     confidence = min(1.0, top_score)
-    if critical and confidence < settings.CRITICAL_CONFIDENCE_THRESHOLD:
+    if critical and confidence < live_settings.CRITICAL_CONFIDENCE_THRESHOLD:
         return _record_support_result(
             session=session,
             user_id=user_id,
@@ -1943,7 +1946,9 @@ def run_support_pipeline(
 
     if (
         not critical
-        and settings.LOW_CONFIDENCE_MIN <= confidence <= settings.LOW_CONFIDENCE_MAX
+        and live_settings.LOW_CONFIDENCE_MIN
+        <= confidence
+        <= live_settings.LOW_CONFIDENCE_MAX
     ):
         answer_text = (
             f"{answer_text}\n\nТребуется проверка актуальности по указанным источникам."

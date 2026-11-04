@@ -671,3 +671,91 @@ export const getIngestJobs = () =>
     method: "GET",
     headers: authHeader(),
   })
+
+/* ------------------------------ настройки ------------------------------ */
+
+export type AppSettingKind =
+  | "str"
+  | "url"
+  | "int"
+  | "float"
+  | "bool"
+  | "secret"
+  | "choice"
+
+export type AppSettingField = {
+  key: string
+  yaml_key: string
+  label: string
+  kind: AppSettingKind
+  help: string
+  choices: string[]
+  minimum?: number | null
+  maximum?: number | null
+  overridden: boolean
+  error?: string | null
+  value?: string | number | boolean | null
+  default?: string | number | boolean | null
+  // только для секретов
+  is_set?: boolean
+  hint?: string | null
+  source?: "admin" | "env" | null
+}
+
+export type AppSettingGroup = {
+  id: string
+  name: string
+  label: string
+  help: string
+  fields: AppSettingField[]
+}
+
+export type AppSettingsState = { groups: AppSettingGroup[] }
+
+export const getAppSettings = () =>
+  request<AppSettingsState>("/api/v1/admin/settings", {
+    method: "GET",
+    headers: authHeader(),
+  })
+
+export const updateAppSettings = (payload: {
+  values?: Record<string, string | number | boolean | null>
+  reset?: string[]
+}) =>
+  request<AppSettingsState & { changed: string[] }>("/api/v1/admin/settings", {
+    method: "PUT",
+    headers: jsonHeaders(),
+    body: JSON.stringify(payload),
+  })
+
+export const importAppSettings = (yaml: string) =>
+  request<AppSettingsState & { applied: string[]; ignored: string[] }>(
+    "/api/v1/admin/settings/import",
+    {
+      method: "POST",
+      headers: jsonHeaders(),
+      body: JSON.stringify({ yaml }),
+    },
+  )
+
+export const exportAppSettings = async (): Promise<string> => {
+  const base = OpenAPI.BASE || ""
+  const response = await fetch(`${base}/api/v1/admin/settings/export`, {
+    headers: authHeader(),
+  })
+  if (!response.ok) {
+    throw new ApiError("Не удалось выгрузить настройки", response.status)
+  }
+  return response.text()
+}
+
+/** Ошибки по полям из ответа 400 `{detail: {errors: {...}}}`. */
+export const settingsFieldErrors = (error: unknown): Record<string, string> => {
+  if (!(error instanceof Error)) return {}
+  try {
+    const parsed = JSON.parse(error.message)
+    return parsed?.errors ?? {}
+  } catch {
+    return {}
+  }
+}
