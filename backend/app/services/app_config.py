@@ -106,9 +106,16 @@ GROUPS: tuple[GroupSpec, ...] = (
         "Маршрутизация FAQ → RAG → оператор",
         "Пороги уверенности встроенного поиска. Меняйте по одному и проверяйте на типовых вопросах.",
     ),
+    GroupSpec(
+        "offtopic",
+        "@ksup/offtopic",
+        "Фильтр офтопа",
+        "Вежливый отказ на вопросы не по теме вместо передачи оператору. "
+        "Кнопка «Передать оператору» остаётся у пользователя.",
+    ),
 )
 
-_PROVIDERS = ("legacy", "gemini_file_search", "anythingllm")
+_PROVIDERS = ("legacy", "search_only", "gemini_file_search", "anythingllm")
 
 SPECS: tuple[SettingSpec, ...] = (
     SettingSpec(
@@ -117,9 +124,39 @@ SPECS: tuple[SettingSpec, ...] = (
         "provider",
         "Активный движок",
         "choice",
-        "legacy — встроенный поиск; gemini_file_search — облако; anythingllm — локально.",
+        "legacy — встроенный поиск + LLM; search_only — встроенный поиск без LLM "
+        "(найденные фрагменты с источниками); gemini_file_search — облако; "
+        "anythingllm — локально.",
         choices=_PROVIDERS,
         db_key="rag_provider",
+    ),
+    SettingSpec(
+        "VECTOR_SEARCH_ENABLED",
+        "rag",
+        "vectorSearch",
+        "Векторный поиск (Qdrant)",
+        "bool",
+        "Только для встроенного поиска. Выключен — BM25 по Postgres, без Qdrant и "
+        "модели embeddings. Включайте, если запущен контейнер qdrant "
+        "(docker compose --profile qdrant), затем «Переиндексировать».",
+    ),
+    SettingSpec(
+        "DENSE_SEARCH_ENABLED",
+        "rag",
+        "denseSearch",
+        "Векторная добавка без Qdrant (лёгкая модель)",
+        "bool",
+        "Для встроенного поиска и «Только поиск»: к BM25 добавляется поиск по смыслу "
+        "маленькой русской моделью (rubert-mini-frida, ~125 МБ, без torch и Qdrant). "
+        "Находит синонимы («стоит» → «стоимость»). Нужны файлы модели в каталоге ниже. "
+        "Векторы документов считаются в фоне при первом вопросе (несколько минут).",
+    ),
+    SettingSpec(
+        "LOCAL_EMBEDDING_MODEL_DIR",
+        "rag",
+        "denseModelDir",
+        "Каталог модели векторной добавки",
+        help="Внутри контейнера backend; в compose папка _local/models примонтирована в /models. Смена каталога — после перезапуска backend.",
     ),
     SettingSpec(
         "RAG_PROVIDER_TIMEOUT_SECONDS",
@@ -226,6 +263,37 @@ SPECS: tuple[SettingSpec, ...] = (
         maximum=1,
     ),
     SettingSpec(
+        "RAG_TOP_SCORE_THRESHOLD_HASHED",
+        "routing",
+        "ragTopScoreLexical",
+        "Порог лучшего фрагмента без векторов (BM25)",
+        "float",
+        "Доля слов вопроса, найденных в лучшем фрагменте. Действует, когда "
+        "векторный поиск выключен. Ниже порога — вопрос уходит оператору.",
+        minimum=0,
+        maximum=1,
+    ),
+    SettingSpec(
+        "DENSE_SCORE_FLOOR",
+        "routing",
+        "denseScoreFloor",
+        "Векторная добавка: косинус, дающий оценку 0",
+        "float",
+        "Косинус между FLOOR и CEIL линейно переводится в оценку 0..1 и сравнивается "
+        "с порогом лучшего фрагмента BM25.",
+        minimum=0,
+        maximum=1,
+    ),
+    SettingSpec(
+        "DENSE_SCORE_CEIL",
+        "routing",
+        "denseScoreCeil",
+        "Векторная добавка: косинус, дающий оценку 1",
+        "float",
+        minimum=0,
+        maximum=1,
+    ),
+    SettingSpec(
         "RAG_RELEVANT_CHUNK_THRESHOLD",
         "routing",
         "ragRelevantChunk",
@@ -269,6 +337,38 @@ SPECS: tuple[SettingSpec, ...] = (
         "float",
         minimum=0,
         maximum=1,
+    ),
+    SettingSpec(
+        "OFFTOPIC_FILTER_ENABLED",
+        "offtopic",
+        "enabled",
+        "Включить фильтр офтопа",
+        "bool",
+        "Выключен по умолчанию. Правила «мусора» (пустой ввод, «ааааа», русский "
+        "текст в латинской раскладке) работают для любого движка; проверка по "
+        "сходству — только со встроенным поиском и включённой векторной добавкой.",
+    ),
+    SettingSpec(
+        "OFFTOPIC_MIN_MEAN_SIMILARITY",
+        "offtopic",
+        "minMeanSimilarity",
+        "Порог среднего сходства top-N",
+        "float",
+        "Среднее косинусов лучших фрагментов к вопросу (rubert-mini-frida). "
+        "Ниже порога вопрос считается офтопом и получает вежливый отказ без "
+        "записи в очередь. Подбирайте по логам: выше порог — больше отказов, "
+        "в том числе по теме.",
+        minimum=0,
+        maximum=1,
+    ),
+    SettingSpec(
+        "OFFTOPIC_TOP_N",
+        "offtopic",
+        "topN",
+        "Сколько лучших фрагментов усреднять",
+        "int",
+        minimum=1,
+        maximum=20,
     ),
     SettingSpec(
         "RETRIEVAL_TOP_K",

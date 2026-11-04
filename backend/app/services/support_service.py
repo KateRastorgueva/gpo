@@ -7,6 +7,7 @@
 """
 
 import hashlib
+import logging
 import math
 import re
 import time
@@ -73,8 +74,10 @@ from app.models import (
     TagPublic,
     User,
 )
-from app.services import rag_providers
+from app.services import dense_local, offtopic, rag_providers
 from app.services.app_config import live_settings
+
+logger = logging.getLogger(__name__)
 
 CRITICAL_KEYWORDS = (
     "срок",
@@ -637,6 +640,26 @@ def embed_texts(texts: Iterable[str]) -> list[list[float]]:
     return [_resize_vector(vector, settings.EMBEDDING_DIM) for vector in vectors]
 
 
+def vector_search_enabled() -> bool:
+    """Включён ли векторный слой (Qdrant + embeddings) встроенного поиска.
+
+    Выключен — индексация пишет чанки только в Postgres, поиск идёт одним BM25,
+    а Qdrant и модель embeddings не нужны вовсе (лёгкий режим для ноутбука).
+    """
+
+    return bool(live_settings.VECTOR_SEARCH_ENABLED)
+
+
+def lexical_scoring() -> bool:
+    """Оценка для маршрутизации — покрытие запроса чанком, а не косинус.
+
+    Так считается и без векторного слоя, и с hashed-эмбеддингами: их косинусы
+    почти не различают тему. Пороги тоже берутся «hashed» (см. routing_thresholds).
+    """
+
+    return not vector_search_enabled() or get_embedding_backend() == "hashed"
+
+
 def _qdrant_base_url() -> str:
     """Формирует базовый URL Qdrant с учетом настроек host и port."""
 
@@ -679,6 +702,8 @@ def _qdrant_request(
 
 def ensure_qdrant_collection(vector_size: int) -> None:
     """Создает коллекцию Qdrant для embeddings, если она еще не существует."""
+    if not vector_search_enabled():
+        return
 
     collection_path = f"/collections/{settings.QDRANT_COLLECTION_NAME}"
     response = _qdrant_request("GET", collection_path, allowed_statuses={404})
@@ -722,6 +747,8 @@ OWNER_TYPE_DOC = "doc"
 
 def ensure_qdrant_payload_indexes() -> None:
     """Идемпотентно создаёт payload-индексы для фильтров поиска."""
+    if not vector_search_enabled():
+        return
     index_path = f"/collections/{settings.QDRANT_COLLECTION_NAME}/index"
     for field_name in PAYLOAD_INDEX_FIELDS:
         _qdrant_request(
@@ -791,6 +818,8 @@ def _lexical_owner_condition(owner_types: list[str] | None) -> ColumnElement[boo
 
 def reset_qdrant_collection() -> None:
     """Удаляет коллекцию Qdrant, игнорируя ее отсутствие."""
+    if not vector_search_enabled():
+        return
 
     collection_path = f"/collections/{settings.QDRANT_COLLECTION_NAME}"
     _qdrant_request("DELETE", collection_path, allowed_statuses={404})
@@ -798,6 +827,9 @@ def reset_qdrant_collection() -> None:
 
 def _scroll_qdrant_points(limit: int = 256) -> list[dict[str, Any]]:
     """Постранично получает payload всех точек из коллекции Qdrant."""
+
+    if not vector_search_enabled():
+        return []
 
     collection_path = f"/collections/{settings.QDRANT_COLLECTION_NAME}/points/scroll"
     points: list[dict[str, Any]] = []
@@ -827,7 +859,7 @@ def _scroll_qdrant_points(limit: int = 256) -> list[dict[str, Any]]:
 def _delete_qdrant_points(point_ids: list[Any]) -> None:
     """Удаляет из Qdrant точки с указанными идентификаторами."""
 
-    if not point_ids:
+    if not point_ids or not vector_search_enabled():
         return
     _qdrant_request(
         "POST",
@@ -983,6 +1015,8 @@ def retrieve_semantic_chunks(
     Фильтры (D4) уходят в Qdrant как `filter`, то есть отбор выполняется ДО top-k —
     recall не страдает от post-filtering.
     """
+    if not vector_search_enabled():
+        return []
     final_limit = limit or settings.HYBRID_CANDIDATES_LIMIT
     query_vector = embed_text(question)
     ensure_qdrant_collection(len(query_vector))
@@ -1211,6 +1245,24 @@ BM25_B = 0.75
 RRF_K = 60
 
 
+# Токены чанков для BM25. Содержимое чанка с данным id не меняется (переиндексация
+# создаёт новые чанки), поэтому стемминг всего корпуса делается один раз на процесс,
+# а не на каждый вопрос.
+_BM25_DOC_CACHE: dict[tuple[uuid.UUID, str], Counter[str]] = {}
+_BM25_DOC_CACHE_MAX = 100_000
+
+
+def _bm25_doc(chunk: KnowledgeChunk, title: str) -> Counter[str]:
+    key = (chunk.id, title)
+    cached = _BM25_DOC_CACHE.get(key)
+    if cached is None:
+        if len(_BM25_DOC_CACHE) >= _BM25_DOC_CACHE_MAX:
+            _BM25_DOC_CACHE.clear()
+        cached = Counter(_bm25_tokens(f"{title} {chunk.content}"))
+        _BM25_DOC_CACHE[key] = cached
+    return cached
+
+
 def _bm25_tokens(value: str) -> list[str]:
     """Токены для BM25: без стоп-слов, со стеммингом."""
 
@@ -1230,6 +1282,7 @@ def retrieve_lexical_bm25(
     owner_types: list[str] | None = None,
     category_ids: list[uuid.UUID] | None = None,
     tag_ids: list[uuid.UUID] | None = None,
+    rows: list[tuple[KnowledgeChunk, uuid.UUID, str, str | None]] | None = None,
 ) -> tuple[list[RetrievalResult], dict[uuid.UUID, float]]:
     """BM25 по всем активным чанкам.
 
@@ -1238,17 +1291,15 @@ def retrieve_lexical_bm25(
     в корпусе, считаются максимально информативными и снижают покрытие.
     """
 
-    rows = _lexical_rows(
-        session, owner_types=owner_types, category_ids=category_ids, tag_ids=tag_ids
-    )
+    if rows is None:
+        rows = _lexical_rows(
+            session, owner_types=owner_types, category_ids=category_ids, tag_ids=tag_ids
+        )
     query_terms = set(_bm25_tokens(question))
     if not rows or not query_terms:
         return [], {}
 
-    docs = [
-        Counter(_bm25_tokens(f"{title} {chunk.content}"))
-        for chunk, _id, title, _ref in rows
-    ]
+    docs = [_bm25_doc(chunk, title) for chunk, _id, title, _ref in rows]
     total_docs = len(docs)
     avg_len = sum(sum(doc.values()) for doc in docs) / total_docs or 1.0
     doc_freq: Counter[str] = Counter()
@@ -1304,10 +1355,67 @@ def retrieve_lexical_bm25(
     return results, coverage
 
 
+def dense_search_active() -> bool:
+    """Включена ли лёгкая векторная добавка (numpy-модель без Qdrant)."""
+
+    return (
+        not vector_search_enabled()
+        and bool(live_settings.DENSE_SEARCH_ENABLED)
+        and dense_local.model_available()
+    )
+
+
+def retrieve_dense_local(
+    rows: list[tuple[KnowledgeChunk, uuid.UUID, str, str | None]],
+    question: str,
+    diagnostics: dict[str, Any] | None = None,
+) -> tuple[list[RetrievalResult], dict[uuid.UUID, float]]:
+    """Векторный поиск локальной моделью по тем же строкам, что и BM25.
+
+    Возвращает кандидатов по убыванию косинуса и откалиброванную оценку 0..1
+    (см. DENSE_SCORE_FLOOR/CEIL) для маршрутизации. Пока кэш векторов не
+    заполнен, чанки без вектора просто не участвуют (их досчитывает фон).
+    """
+
+    items = []
+    for chunk, _owner_id, title, _ref in rows:
+        text = dense_local.document_text(title, chunk.content)
+        items.append((dense_local.text_key(text), text))
+    try:
+        ranked, _missing = dense_local.search(question, items)
+    except Exception:
+        logger.exception("dense search failed, BM25 only")
+        return [], {}
+    if diagnostics is not None:
+        # Сырые косинусы лучших документов — для фильтра офтопа.
+        diagnostics["dense_cosines"] = [
+            cosine for _pos, cosine in ranked[: max(1, live_settings.OFFTOPIC_TOP_N)]
+        ]
+    limit = settings.HYBRID_CANDIDATES_LIMIT
+    scores: dict[uuid.UUID, float] = {}
+    results: list[RetrievalResult] = []
+    for pos, cosine in ranked[:limit]:
+        chunk, owner_id, owner_title, owner_ref = rows[pos]
+        score = dense_local.calibrated_score(cosine)
+        scores[chunk.id] = score
+        results.append(
+            RetrievalResult(
+                source_id=owner_id,
+                source_title=owner_title,
+                source_ref=owner_ref,
+                chunk_id=chunk.id,
+                snippet=chunk.content,
+                score=_clamp_score(score),
+            )
+        )
+    return results, scores
+
+
 def _rrf_merge(
     semantic_results: list[RetrievalResult],
     lexical_results: list[RetrievalResult],
     coverage: dict[uuid.UUID, float],
+    dense_scores: dict[uuid.UUID, float] | None = None,
 ) -> list[RetrievalResult]:
     """Объединяет списки по рангам (RRF), не смешивая несопоставимые шкалы оценок.
 
@@ -1326,15 +1434,19 @@ def _rrf_merge(
         _result_key(i): i.score
         for i in _merge_hybrid_results(semantic_results, lexical_results)
     }
-    hashed = get_embedding_backend() == "hashed"
+    hashed = lexical_scoring()
     merged: list[RetrievalResult] = []
     for key in sorted(rrf, key=lambda k: rrf[k], reverse=True):
         base = items[key]
-        score = (
-            coverage.get(base.chunk_id, 0.0)
-            if hashed and base.chunk_id
-            else blended.get(key, base.score)
-        )
+        if hashed and base.chunk_id:
+            # С векторной добавкой фрагмент, найденный по смыслу (синоним, другая
+            # форма слова), получает оценку по косинусу, даже если слов вопроса в
+            # нём мало: берётся большая из двух оценок.
+            score = coverage.get(base.chunk_id, 0.0)
+            if dense_scores:
+                score = max(score, dense_scores.get(base.chunk_id, 0.0))
+        else:
+            score = blended.get(key, base.score)
         merged.append(
             RetrievalResult(
                 source_id=base.source_id,
@@ -1369,7 +1481,15 @@ def retrieve_relevant_chunks(
     owner_types: list[str] | None = None,
     category_ids: list[uuid.UUID] | None = None,
     tag_ids: list[uuid.UUID] | None = None,
+    diagnostics: dict[str, Any] | None = None,
 ) -> list[RetrievalResult]:
+    if dense_search_active():
+        rows = _lexical_rows(
+            session, owner_types=owner_types, category_ids=category_ids, tag_ids=tag_ids
+        )
+        dense, dense_scores = retrieve_dense_local(rows, question, diagnostics)
+        lexical, coverage = retrieve_lexical_bm25(session, question, rows=rows)
+        return _rrf_merge(dense, lexical, coverage, dense_scores)
     semantic = retrieve_semantic_chunks(
         question,
         owner_types=owner_types,
@@ -1481,6 +1601,117 @@ def _generate_with_ollama(prompt: str) -> str:
     if not text:
         raise RuntimeError("Ollama returned empty text")
     return text
+
+
+SEARCH_ONLY_MAX_FRAGMENTS = 3
+SEARCH_ONLY_FRAGMENT_CHARS = 450
+_SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?;:])\s+|\n+")
+
+
+def best_fragment(
+    question: str, text: str, limit: int = SEARCH_ONLY_FRAGMENT_CHARS
+) -> str:
+    """Кусок чанка вокруг предложения, где больше всего слов вопроса.
+
+    Чанк ~1000 символов, а пользователю нужна пара предложений по делу: берём
+    предложение с наибольшим числом основ из вопроса и добавляем соседние, пока
+    помещаемся в ``limit``.
+    """
+
+    sentences = [
+        part.strip() for part in _SENTENCE_SPLIT_RE.split(text) if part.strip()
+    ]
+    if not sentences:
+        return ""
+    query = set(_bm25_tokens(question))
+    scores = [len(query.intersection(_bm25_tokens(sentence))) for sentence in sentences]
+    best = max(range(len(sentences)), key=lambda index: scores[index])
+    start = end = best
+    length = len(sentences[best])
+    while True:
+        grown = False
+        for candidate in (end + 1, start - 1):
+            if 0 <= candidate < len(sentences) and not (start <= candidate <= end):
+                extra = len(sentences[candidate]) + 1
+                if length + extra > limit:
+                    continue
+                length += extra
+                start, end = min(start, candidate), max(end, candidate)
+                grown = True
+        if not grown:
+            break
+    fragment = " ".join(sentences[start : end + 1])
+    if len(fragment) > limit:
+        fragment = fragment[: limit - 1].rsplit(" ", 1)[0] + "…"
+    prefix = "… " if start > 0 else ""
+    suffix = " …" if end < len(sentences) - 1 and not fragment.endswith("…") else ""
+    return f"{prefix}{fragment}{suffix}"
+
+
+def build_search_only_answer(question: str, results: list[RetrievalResult]) -> str:
+    """Ответ без LLM: найденные фрагменты с источником и оценкой релевантности."""
+
+    _top, chunk_threshold, _min = routing_thresholds()
+    picked: list[RetrievalResult] = []
+    seen: set[str] = set()
+    for item in results:
+        key = _result_key(item)
+        if key in seen:
+            continue
+        if picked and item.score < chunk_threshold:
+            break
+        seen.add(key)
+        picked.append(item)
+        if len(picked) >= SEARCH_ONLY_MAX_FRAGMENTS:
+            break
+    lines = ["Вот что нашлось в документах по вашему вопросу:"]
+    for index, item in enumerate(picked, start=1):
+        fragment = best_fragment(question, item.snippet).replace("\n", " ")
+        lines.append(
+            f"\n**{index}. {item.source_title}** · релевантность {item.score:.2f}\n"
+            f"> {fragment}"
+        )
+    lines.append(
+        "\nЭто фрагменты документов без пересказа. Если ответа здесь нет, "
+        "напишите оператору."
+    )
+    return "\n".join(lines)
+
+
+def ingest_local_file(session: Session, filename: str, data: bytes) -> str:
+    """Загрузить файл во встроенную базу знаний (Postgres) и проиндексировать.
+
+    Файл с тем же именем заменяет прежний (переиндексация), а не дублируется.
+    Возвращает статус для пакетной загрузки (``ok``); ошибки — исключением.
+    """
+
+    content, source_type, source_ref = resolve_source_content(
+        filename=filename, file_bytes=data, source_url=None, manual_content=None
+    )
+    if not content.strip():
+        raise ValueError("В файле нет текста")
+    source = session.exec(
+        select(KnowledgeSource).where(
+            KnowledgeSource.source_ref == source_ref,
+            KnowledgeSource.is_active == True,  # noqa: E712
+        )
+    ).first()
+    if source is None:
+        source = KnowledgeSource(
+            title=_ensure_utf8_text(filename.rsplit(".", 1)[0]),
+            source_type=source_type,
+            source_ref=source_ref,
+            content=content,
+            status="pending",
+            is_active=True,
+        )
+    else:
+        source.content = content
+    session.add(source)
+    session.flush()
+    index_source(session, source)
+    session.commit()
+    return "ok"
 
 
 def generate_answer(question: str, results: list[RetrievalResult]) -> tuple[str, bool]:
@@ -1672,9 +1903,9 @@ def _record_support_result(
 def routing_thresholds() -> tuple[float, float, int]:
     """Возвращает пороги маршрутизации RAG для текущего backend embeddings."""
 
-    if get_embedding_backend() == "hashed":
+    if lexical_scoring():
         return (
-            settings.RAG_TOP_SCORE_THRESHOLD_HASHED,
+            live_settings.RAG_TOP_SCORE_THRESHOLD_HASHED,
             settings.RAG_RELEVANT_CHUNK_THRESHOLD_HASHED,
             settings.RAG_MIN_RELEVANT_CHUNKS_HASHED,
         )
@@ -1806,6 +2037,73 @@ def _run_external_rag(
     )
 
 
+def _reject_response(
+    *,
+    payload: SupportAskRequest,
+    session_id: str,
+    reason: str,
+    faq_score: float,
+    critical: bool,
+    started: float,
+    mean_similarity: float | None = None,
+) -> SupportAskResponse:
+    """Вежливый отказ на офтоп: в базу ничего не пишется, очередь оператора не растёт."""
+
+    event_log.log_event(
+        "support.reject",
+        session_id=session_id,
+        reason=reason,
+        mean_similarity=round(mean_similarity, 4)
+        if mean_similarity is not None
+        else None,
+        threshold=float(live_settings.OFFTOPIC_MIN_MEAN_SIMILARITY),
+        question=payload.question if settings.EVENT_LOG_QUESTIONS else None,
+        question_len=len(payload.question),
+        response_time_ms=_elapsed_ms(started),
+    )
+    return SupportAskResponse(
+        request_id=None,
+        session_id=session_id,
+        mode="reject",
+        answer=offtopic.REFUSAL_TEXT,
+        sources=[],
+        confidence=0.0,
+        escalated=False,
+        fallback_used=False,
+        route_reason=reason,
+        decision_metrics=DecisionMetrics(
+            top_score=0.0,
+            relevant_chunks=0,
+            faq_score=_clamp_score(faq_score),
+            conflict=False,
+            critical=critical,
+        ),
+    )
+
+
+def escalate_to_operator(
+    *, session: Session, user_id: uuid.UUID | None, payload: SupportAskRequest
+) -> SupportAskResponse:
+    """Пользователь сам передаёт вопрос оператору (кнопка после отказа)."""
+
+    return _record_support_result(
+        session=session,
+        user_id=user_id,
+        payload=payload,
+        session_id=payload.session_id or str(uuid.uuid4()),
+        mode="operator",
+        confidence=0.0,
+        fallback_used=False,
+        escalated=True,
+        answer_text="Вопрос передан оператору, ответ появится здесь.",
+        sources=[],
+        escalation_reason="user-requested",
+        route_reason="user_requested_operator",
+        decision_metrics=DecisionMetrics(),
+        response_time_ms=0,
+    )
+
+
 def run_support_pipeline(
     *, session: Session, user_id: uuid.UUID | None, payload: SupportAskRequest
 ) -> SupportAskResponse:
@@ -1849,6 +2147,20 @@ def run_support_pipeline(
             response_time_ms=_elapsed_ms(started),
         )
 
+    # Фильтр офтопа, шаг 1: правила «мусора» не зависят от движка и модели.
+    filter_on = bool(live_settings.OFFTOPIC_FILTER_ENABLED)
+    if filter_on:
+        junk_reason = offtopic.junk_rule(payload.question)
+        if junk_reason is not None:
+            return _reject_response(
+                payload=payload,
+                session_id=session_id,
+                reason=junk_reason,
+                faq_score=faq_score,
+                critical=critical,
+                started=started,
+            )
+
     # Движок переключается админом на лету, поэтому читается на каждый запрос.
     provider = rag_providers.get_active_provider(session)
     if rag_providers.is_external_provider_enabled(provider):
@@ -1863,8 +2175,11 @@ def run_support_pipeline(
             provider=provider,
         )
 
+    diagnostics: dict[str, Any] = {}
     try:
-        retrieved = retrieve_relevant_chunks(session=session, question=payload.question)
+        retrieved = retrieve_relevant_chunks(
+            session=session, question=payload.question, diagnostics=diagnostics
+        )
     except Exception as exc:
         event_log.log_event(
             "rag.retrieval_error",
@@ -1893,7 +2208,27 @@ def run_support_pipeline(
             route_reason="retrieval_failure",
             decision_metrics=decision_metrics,
             response_time_ms=_elapsed_ms(started),
+            provider=provider,
         )
+
+    # Фильтр офтопа, шаг 2: среднее сходство top-N. Косинусы есть только у
+    # векторной добавки; без неё решает прежняя маршрутизация.
+    if filter_on and diagnostics.get("dense_cosines"):
+        is_offtopic, mean_similarity = offtopic.is_offtopic_by_similarity(
+            diagnostics["dense_cosines"],
+            float(live_settings.OFFTOPIC_MIN_MEAN_SIMILARITY),
+            int(live_settings.OFFTOPIC_TOP_N),
+        )
+        if is_offtopic:
+            return _reject_response(
+                payload=payload,
+                session_id=session_id,
+                reason=offtopic.REASON_LOW_SIMILARITY,
+                faq_score=faq_score,
+                critical=critical,
+                started=started,
+                mean_similarity=mean_similarity,
+            )
 
     top_threshold, chunk_threshold, min_relevant = routing_thresholds()
     top_score = retrieved[0].score if retrieved else 0.0
@@ -1926,6 +2261,7 @@ def run_support_pipeline(
             route_reason=route_reason,
             decision_metrics=decision_metrics,
             response_time_ms=_elapsed_ms(started),
+            provider=provider,
         )
 
     confidence = min(1.0, top_score)
@@ -1945,6 +2281,26 @@ def run_support_pipeline(
             route_reason="critical_low_confidence",
             decision_metrics=decision_metrics,
             response_time_ms=_elapsed_ms(started),
+            provider=provider,
+        )
+
+    if provider == "search_only":
+        return _record_support_result(
+            session=session,
+            user_id=user_id,
+            payload=payload,
+            session_id=session_id,
+            mode="rag",
+            confidence=confidence,
+            fallback_used=False,
+            escalated=False,
+            answer_text=build_search_only_answer(payload.question, retrieved),
+            sources=_to_source_attributions(retrieved),
+            escalation_reason=None,
+            route_reason="search_only",
+            decision_metrics=decision_metrics,
+            response_time_ms=_elapsed_ms(started),
+            provider=provider,
         )
 
     try:
@@ -1968,6 +2324,7 @@ def run_support_pipeline(
             route_reason="llm_failure",
             decision_metrics=decision_metrics,
             response_time_ms=_elapsed_ms(started),
+            provider=provider,
         )
 
     if not answer_text.strip():
@@ -1986,6 +2343,7 @@ def run_support_pipeline(
             route_reason="empty_answer",
             decision_metrics=decision_metrics,
             response_time_ms=_elapsed_ms(started),
+            provider=provider,
         )
 
     if (
@@ -2304,6 +2662,8 @@ def resolve_source_content(
 
 def remove_source_vectors(source_id: uuid.UUID) -> None:
     """Удаляет из Qdrant все векторы, связанные с указанным источником."""
+    if not vector_search_enabled():
+        return
 
     _qdrant_request(
         "POST",
@@ -2320,6 +2680,8 @@ def remove_source_vectors(source_id: uuid.UUID) -> None:
 
 
 def remove_doc_vectors(doc_id: uuid.UUID) -> None:
+    if not vector_search_enabled():
+        return
     _qdrant_request(
         "POST",
         f"/collections/{settings.QDRANT_COLLECTION_NAME}/points/delete",
@@ -2336,6 +2698,8 @@ def remove_doc_vectors(doc_id: uuid.UUID) -> None:
 
 def _upsert_points(points: list[dict[str, Any]]) -> None:
     """Записывает или обновляет набор точек в коллекции Qdrant."""
+    if not vector_search_enabled():
+        return
 
     _qdrant_request(
         "PUT",
@@ -2358,12 +2722,16 @@ def _reindex_owner_chunks(
     if not chunks:
         raise ValueError("Content is empty after processing")
 
-    vectors = embed_texts(chunks)
+    use_vectors = vector_search_enabled()
+    vectors: list[list[float]] = (
+        embed_texts(chunks) if use_vectors else [[]] * len(chunks)
+    )
     if not vectors:
         raise ValueError("Failed to create embeddings")
-    ensure_qdrant_collection(len(vectors[0]))
-    ensure_qdrant_payload_indexes()
-    embedding_model = get_embedding_model_id()
+    if use_vectors:
+        ensure_qdrant_collection(len(vectors[0]))
+        ensure_qdrant_payload_indexes()
+    embedding_model = get_embedding_model_id() if use_vectors else "none"
 
     delete_vectors()
     session.exec(delete(KnowledgeChunk).where(chunk_owner_condition))

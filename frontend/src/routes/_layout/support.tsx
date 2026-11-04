@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button"
 import useCustomToast from "@/hooks/useCustomToast"
 import {
   askSupport,
+  escalateSupport,
   getSupportHistory,
   type SupportHistoryEntry,
 } from "@/services/supportApi"
@@ -17,6 +18,16 @@ type Chat = {
   sessionId: string
   title: string
   lastMessageAt: string
+}
+
+// Отказ фильтра офтопа на сервере не сохраняется, поэтому живёт только в
+// памяти страницы: до перезагрузки или до нажатия «Передать оператору».
+type Rejection = {
+  id: string
+  sessionId: string
+  question: string
+  answer: string
+  createdAt: string
 }
 
 const STORAGE_KEY = "support_chats"
@@ -119,6 +130,7 @@ function SupportPage() {
   )
   const [draft, setDraft] = useState("")
   const [pendingQuestion, setPendingQuestion] = useState<string | null>(null)
+  const [rejections, setRejections] = useState<Rejection[]>([])
   const bottomRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
 
@@ -184,6 +196,20 @@ function SupportPage() {
         session_id: vars.sessionId,
         channel: "web",
       }),
+    onSuccess: (data, vars) => {
+      if (data.mode === "reject") {
+        setRejections((list) => [
+          ...list,
+          {
+            id: crypto.randomUUID(),
+            sessionId: vars.sessionId,
+            question: vars.question,
+            answer: data.answer,
+            createdAt: new Date().toISOString(),
+          },
+        ])
+      }
+    },
     onSettled: async (_data, _error, vars) => {
       await queryClient.invalidateQueries({
         queryKey: ["supportHistory", vars.sessionId],
@@ -197,10 +223,32 @@ function SupportPage() {
     },
   })
 
+  const escalateMutation = useMutation({
+    mutationFn: (rejection: Rejection) =>
+      escalateSupport({
+        question: rejection.question,
+        session_id: rejection.sessionId,
+        channel: "web",
+      }),
+    onSuccess: async (_data, rejection) => {
+      setRejections((list) => list.filter((item) => item.id !== rejection.id))
+      await queryClient.invalidateQueries({
+        queryKey: ["supportHistory", rejection.sessionId],
+      })
+      queryClient.invalidateQueries({ queryKey: ["supportChats"] })
+    },
+    onError: (error: Error) => showErrorToast(error.message),
+  })
+
+  // Отказы активного чата; после истории, т.к. они всегда новее её записей.
+  const activeRejections = rejections.filter(
+    (item) => item.sessionId === activeId,
+  )
+
   // Прокрутка к последнему сообщению при новых ответах и при отправке вопроса.
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" })
-  }, [entries.length, pendingQuestion, activeId])
+  }, [entries.length, activeRejections.length, pendingQuestion, activeId])
 
   useEffect(() => {
     inputRef.current?.focus()
@@ -253,7 +301,10 @@ function SupportPage() {
     }
   }
 
-  const isEmpty = !historyQuery.isFetching && entries.length === 0
+  const isEmpty =
+    !historyQuery.isFetching &&
+    entries.length === 0 &&
+    activeRejections.length === 0
 
   return (
     <div className="flex h-[calc(100vh-8rem)] min-h-[480px] overflow-hidden rounded-lg border">
@@ -394,7 +445,9 @@ function SupportPage() {
                   ) : null}
                   {!entry.escalated || reply ? (
                     <details className="ml-2 text-xs text-muted-foreground">
-                      <summary className="cursor-pointer">Оценить ответ</summary>
+                      <summary className="cursor-pointer">
+                        Оценить ответ
+                      </summary>
                       <div className="mt-2 max-w-md">
                         <FeedbackForm requestId={entry.request_id} />
                       </div>
@@ -403,6 +456,46 @@ function SupportPage() {
                 </div>
               )
             })}
+
+            {activeRejections.map((rejection) => (
+              <div key={rejection.id} className="flex flex-col gap-3">
+                <Message
+                  type="user"
+                  content={rejection.question}
+                  createdAt={rejection.createdAt}
+                />
+                <Message
+                  type="bot"
+                  content={rejection.answer}
+                  createdAt={rejection.createdAt}
+                />
+                <div className="ml-2 flex flex-wrap gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={escalateMutation.isPending}
+                    onClick={() => escalateMutation.mutate(rejection)}
+                  >
+                    {escalateMutation.isPending &&
+                    escalateMutation.variables?.id === rejection.id ? (
+                      <Loader2 className="animate-spin" />
+                    ) : null}
+                    Передать оператору
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() =>
+                      setRejections((list) =>
+                        list.filter((item) => item.id !== rejection.id),
+                      )
+                    }
+                  >
+                    Не нужно
+                  </Button>
+                </div>
+              </div>
+            ))}
 
             {pendingQuestion ? (
               <div className="flex flex-col gap-3">
