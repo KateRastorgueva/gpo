@@ -25,6 +25,9 @@ TICKET_RESOLVE = "ticket:resolve"
 METRICS_READ = "metrics:read"
 USER_MANAGE = "user:manage"
 TAXONOMY_WRITE = "taxonomy:write"
+# Настройки приложения (ключи API, движки, пороги). Есть только у admin через "*",
+# поэтому синхронизирующая миграция ролей не нужна.
+SETTINGS_MANAGE = "settings:manage"
 
 ALL_PERMISSIONS: frozenset[str] = frozenset(
     {
@@ -35,6 +38,7 @@ ALL_PERMISSIONS: frozenset[str] = frozenset(
         METRICS_READ,
         USER_MANAGE,
         TAXONOMY_WRITE,
+        SETTINGS_MANAGE,
     }
 )
 

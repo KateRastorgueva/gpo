@@ -5,10 +5,12 @@ import { UsersService } from "@/client"
 import { DocsPanel } from "@/components/SupportAdmin/DocsPanel"
 import { EnginesPanel } from "@/components/SupportAdmin/EnginesPanel"
 import { FaqPanel } from "@/components/SupportAdmin/FaqPanel"
+import { IntentPanel } from "@/components/SupportAdmin/IntentPanel"
 import { KnowledgePanel } from "@/components/SupportAdmin/KnowledgePanel"
 import { MetricsPanel } from "@/components/SupportAdmin/MetricsPanel"
 import { RequestsPanel } from "@/components/SupportAdmin/RequestsPanel"
 import { SearchPanel } from "@/components/SupportAdmin/SearchPanel"
+import { SettingsPanel } from "@/components/SupportAdmin/SettingsPanel"
 import { TaxonomyPanel } from "@/components/SupportAdmin/TaxonomyPanel"
 import { TicketsPanel } from "@/components/SupportAdmin/TicketsPanel"
 import { UsersPanel } from "@/components/SupportAdmin/UsersPanel"
@@ -99,10 +101,22 @@ const TABS: TabDefinition[] = [
     render: () => <FaqPanel />,
   },
   {
+    value: "intent",
+    label: "Классификатор тем",
+    permission: PERMISSIONS.METRICS_READ,
+    render: () => <IntentPanel />,
+  },
+  {
     value: "users",
     label: "Пользователи",
     permission: PERMISSIONS.USER_MANAGE,
     render: () => <UsersPanel />,
+  },
+  {
+    value: "settings",
+    label: "Настройки",
+    permission: PERMISSIONS.SETTINGS_MANAGE,
+    render: () => <SettingsPanel />,
   },
 ]
 
@@ -140,7 +154,13 @@ function AdminSupportPage() {
       >
         <TabsList className="flex h-auto w-full flex-wrap justify-start gap-1">
           {availableTabs.map((tab) => (
-            <TabsTrigger key={tab.value} value={tab.value}>
+            <TabsTrigger
+              key={tab.value}
+              value={tab.value}
+              // Без этого первая строка вкладок растягивается на всю высоту
+              // списка, а вторая уезжает под содержимое и не кликается.
+              className="h-8 flex-none"
+            >
               {tab.label}
             </TabsTrigger>
           ))}

@@ -80,6 +80,29 @@ export function MetricsPanel() {
             <p className="text-xs text-muted-foreground">
               Отзыв считается один раз на запрос; оценка по шкале 1–5.
             </p>
+            {metrics.by_intent?.length ? (
+              <div className="grid gap-2">
+                <p className="text-sm font-medium">По темам</p>
+                <div className="grid gap-1">
+                  {metrics.by_intent.map((item) => (
+                    <div
+                      key={item.intent}
+                      className="grid grid-cols-[1fr_auto_auto] items-center gap-3 rounded-md border px-3 py-1.5 text-sm"
+                    >
+                      <span>{item.label}</span>
+                      <span className="tabular-nums">{item.total}</span>
+                      <span className="w-28 text-right text-xs text-muted-foreground tabular-nums">
+                        оператор {modeShare(item.operator_share)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Тему назначает классификатор («Классификатор тем»); запросы
+                  без темы сюда не входят.
+                </p>
+              </div>
+            ) : null}
           </>
         ) : null}
       </CardContent>

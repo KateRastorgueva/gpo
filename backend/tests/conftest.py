@@ -28,6 +28,7 @@ from app.models import (
     Tag,
     User,
 )
+from app.services import app_config
 from tests.utils.user import authentication_token_from_email
 from tests.utils.utils import get_superuser_token_headers
 
@@ -43,7 +44,10 @@ def _assert_isolated_test_database() -> None:
     рабочей базы возможен только через явный ALLOW_DESTRUCTIVE_TESTS=1.
     """
     database = settings.POSTGRES_DB
-    if database.endswith(TEST_DB_SUFFIX) or os.getenv(ALLOW_DESTRUCTIVE_TESTS_ENV) == "1":
+    if (
+        database.endswith(TEST_DB_SUFFIX)
+        or os.getenv(ALLOW_DESTRUCTIVE_TESTS_ENV) == "1"
+    ):
         return
     raise RuntimeError(
         f"Refusing to run tests against database {database!r}: the test session deletes "
@@ -85,6 +89,15 @@ def db() -> Generator[Session, None, None]:
         statement = delete(User)
         session.execute(statement)
         session.commit()
+
+
+@pytest.fixture(autouse=True)
+def _fresh_app_config() -> Generator[None, None, None]:
+    # Настройки из админки кэшируются на несколько секунд; тесты удаляют строки
+    # app_setting напрямую, поэтому кэш сбрасываем вокруг каждого теста.
+    app_config.invalidate_cache()
+    yield
+    app_config.invalidate_cache()
 
 
 @pytest.fixture(scope="module")

@@ -14,6 +14,7 @@ export const PERMISSIONS = {
   METRICS_READ: "metrics:read",
   USER_MANAGE: "user:manage",
   TAXONOMY_WRITE: "taxonomy:write",
+  SETTINGS_MANAGE: "settings:manage",
 } as const
 
 export type Permission = (typeof PERMISSIONS)[keyof typeof PERMISSIONS]

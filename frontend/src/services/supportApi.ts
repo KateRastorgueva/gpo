@@ -18,6 +18,8 @@ export type DecisionMetrics = {
 }
 
 export type SupportRouteMode = "faq" | "rag" | "operator"
+// "reject" — вежливый отказ фильтра офтопа: в журнале записи нет, request_id пуст.
+export type SupportAskMode = SupportRouteMode | "reject"
 export type SupportStepKind = SupportRouteMode | "human"
 
 export type SupportStep = {
@@ -34,9 +36,9 @@ export type SupportStep = {
 }
 
 export type SupportAskResponse = {
-  request_id: string
+  request_id: string | null
   session_id: string
-  mode: SupportRouteMode
+  mode: SupportAskMode
   answer: string
   sources: SourceAttribution[]
   confidence: number
@@ -145,6 +147,8 @@ export type SupportTicket = {
   reason: string
   status: string
   question: string
+  intent?: string | null
+  intent_label?: string | null
   assigned_to?: string | null
   resolution?: string | null
   reopened_from_id?: string | null
@@ -183,6 +187,9 @@ export type JournalRequest = {
   status: string
   confidence: number
   escalated: boolean
+  intent?: string | null
+  intent_label?: string | null
+  intent_confidence?: number | null
   created_at?: string | null
   answered_at?: string | null
   closed_at?: string | null
@@ -195,8 +202,16 @@ export type SupportMetrics = {
   operator_share: number
   average_confidence: number
   empty_sources_share: number
+  by_intent: IntentMetric[]
   feedback_count: number
   average_rating: number
+}
+
+export type IntentMetric = {
+  intent: string
+  label: string
+  total: number
+  operator_share: number
 }
 
 export type ReindexResult = {
@@ -274,6 +289,18 @@ export const askSupport = (payload: {
   channel: "web"
 }) =>
   request<SupportAskResponse>("/api/v1/support/ask", {
+    method: "POST",
+    headers: jsonHeaders(),
+    body: JSON.stringify(payload),
+  })
+
+// Кнопка «Передать оператору» после отказа фильтра офтопа.
+export const escalateSupport = (payload: {
+  question: string
+  session_id: string
+  channel: "web"
+}) =>
+  request<SupportAskResponse>("/api/v1/support/escalate", {
     method: "POST",
     headers: jsonHeaders(),
     body: JSON.stringify(payload),
@@ -585,10 +612,54 @@ export const getSupportMetrics = () =>
     headers: authHeader(),
   })
 
+/* ----------------------------- классификатор тем ---------------------------- */
+
+export type IntentStatus = {
+  enabled: boolean
+  threshold: number
+  service_url: string
+  reachable: boolean
+  model_loaded: boolean
+  error?: string | null
+  categories: { name: string; label: string }[]
+}
+
+export type IntentCandidate = {
+  category: string
+  label: string
+  confidence: number
+}
+
+export type IntentTestResult = {
+  intent?: string | null
+  intent_label?: string | null
+  confidence: number
+  threshold: number
+  candidates: IntentCandidate[]
+  error?: string | null
+}
+
+export const getIntentStatus = () =>
+  request<IntentStatus>("/api/v1/admin/intent/status", {
+    method: "GET",
+    headers: authHeader(),
+  })
+
+export const testIntent = (question: string) =>
+  request<IntentTestResult>("/api/v1/admin/intent/test", {
+    method: "POST",
+    headers: { ...authHeader(), "Content-Type": "application/json" },
+    body: JSON.stringify({ question }),
+  })
+
 /* ---------------------------- внешние RAG-движки --------------------------- */
 
-export type RagProviderName = "gemini_file_search" | "anythingllm" | "legacy"
-export type IngestTarget = "gemini" | "anythingllm" | "both"
+export type RagProviderName =
+  | "gemini_file_search"
+  | "anythingllm"
+  | "legacy"
+  | "search_only"
+export type IngestTarget = "gemini" | "anythingllm" | "both" | "local"
 export type RagEngine = "gemini" | "anythingllm"
 
 export type RagProviderState = {
@@ -604,6 +675,7 @@ export type IngestItem = {
   status: "queued" | "running" | "done" | "failed"
   gemini_status?: string | null
   anythingllm_status?: string | null
+  local_status?: string | null
   error?: string | null
   started_at?: string | null
   finished_at?: string | null
@@ -671,3 +743,91 @@ export const getIngestJobs = () =>
     method: "GET",
     headers: authHeader(),
   })
+
+/* ------------------------------ настройки ------------------------------ */
+
+export type AppSettingKind =
+  | "str"
+  | "url"
+  | "int"
+  | "float"
+  | "bool"
+  | "secret"
+  | "choice"
+
+export type AppSettingField = {
+  key: string
+  yaml_key: string
+  label: string
+  kind: AppSettingKind
+  help: string
+  choices: string[]
+  minimum?: number | null
+  maximum?: number | null
+  overridden: boolean
+  error?: string | null
+  value?: string | number | boolean | null
+  default?: string | number | boolean | null
+  // только для секретов
+  is_set?: boolean
+  hint?: string | null
+  source?: "admin" | "env" | null
+}
+
+export type AppSettingGroup = {
+  id: string
+  name: string
+  label: string
+  help: string
+  fields: AppSettingField[]
+}
+
+export type AppSettingsState = { groups: AppSettingGroup[] }
+
+export const getAppSettings = () =>
+  request<AppSettingsState>("/api/v1/admin/settings", {
+    method: "GET",
+    headers: authHeader(),
+  })
+
+export const updateAppSettings = (payload: {
+  values?: Record<string, string | number | boolean | null>
+  reset?: string[]
+}) =>
+  request<AppSettingsState & { changed: string[] }>("/api/v1/admin/settings", {
+    method: "PUT",
+    headers: jsonHeaders(),
+    body: JSON.stringify(payload),
+  })
+
+export const importAppSettings = (yaml: string) =>
+  request<AppSettingsState & { applied: string[]; ignored: string[] }>(
+    "/api/v1/admin/settings/import",
+    {
+      method: "POST",
+      headers: jsonHeaders(),
+      body: JSON.stringify({ yaml }),
+    },
+  )
+
+export const exportAppSettings = async (): Promise<string> => {
+  const base = OpenAPI.BASE || ""
+  const response = await fetch(`${base}/api/v1/admin/settings/export`, {
+    headers: authHeader(),
+  })
+  if (!response.ok) {
+    throw new ApiError("Не удалось выгрузить настройки", response.status)
+  }
+  return response.text()
+}
+
+/** Ошибки по полям из ответа 400 `{detail: {errors: {...}}}`. */
+export const settingsFieldErrors = (error: unknown): Record<string, string> => {
+  if (!(error instanceof Error)) return {}
+  try {
+    const parsed = JSON.parse(error.message)
+    return parsed?.errors ?? {}
+  } catch {
+    return {}
+  }
+}

@@ -593,6 +593,10 @@ class SupportRequest(SQLModel, table=True):
     confidence: float = Field(default=0.0, ge=0.0, le=1.0)
     fallback_used: bool = False
     escalated: bool = False
+    # Тема вопроса от классификатора (intent_service). None — классификатор
+    # выключен, недоступен или не уверен (ниже порога из админки).
+    intent: str | None = Field(default=None, max_length=50, index=True)
+    intent_confidence: float | None = Field(default=None, ge=0.0, le=1.0)
     # Жизненный цикл: queued | in_progress | answered | closed.
     # «Активные» (queued/in_progress) дополнительно лежат в active_request — горячей таблице
     # очереди, чтобы выборка очереди не зависела от роста журнала (см. план, §0.3).
@@ -754,9 +758,10 @@ class SupportTicket(SQLModel, table=True):
 
 
 class SupportAskResponse(SQLModel):
-    request_id: uuid.UUID
+    # None у отказа (mode="reject"): запись в журнале не создаётся.
+    request_id: uuid.UUID | None
     session_id: str
-    mode: Literal["faq", "rag", "operator"]
+    mode: Literal["faq", "rag", "operator", "reject"]
     answer: str
     sources: list[SourceAttribution] = Field(default_factory=list)
     confidence: float = Field(ge=0.0, le=1.0)
@@ -860,6 +865,13 @@ class SupportFeedbackPublic(SQLModel):
     submitted_at: datetime
 
 
+class IntentMetric(SQLModel):
+    intent: str
+    label: str
+    total: int = Field(default=0, ge=0)
+    operator_share: float = Field(default=0.0, ge=0.0, le=1.0)
+
+
 class SupportMetricsPublic(SQLModel):
     total_requests: int = Field(default=0, ge=0)
     faq_share: float = Field(default=0.0, ge=0.0, le=1.0)
@@ -867,6 +879,8 @@ class SupportMetricsPublic(SQLModel):
     operator_share: float = Field(default=0.0, ge=0.0, le=1.0)
     average_confidence: float = Field(default=0.0, ge=0.0, le=1.0)
     empty_sources_share: float = Field(default=0.0, ge=0.0, le=1.0)
+    # Разбивка по темам классификатора; пусто, пока он ни разу не включался.
+    by_intent: list[IntentMetric] = Field(default_factory=list)
     # Отзывы: оценка по шкале 1..5, поэтому границы отличаются от долей
     feedback_count: int = Field(default=0, ge=0)
     average_rating: float = Field(default=0.0, ge=0.0, le=5.0)
@@ -878,6 +892,8 @@ class SupportTicketPublic(SQLModel):
     reason: str
     status: str
     question: str
+    intent: str | None = None
+    intent_label: str | None = None
     assigned_to: uuid.UUID | None = None
     resolution: str | None = None
     reopened_from_id: uuid.UUID | None = None
@@ -930,6 +946,9 @@ class JournalRequestPublic(SQLModel):
     status: str
     confidence: float
     escalated: bool
+    intent: str | None = None
+    intent_label: str | None = None
+    intent_confidence: float | None = None
     created_at: datetime | None = None
     answered_at: datetime | None = None
     closed_at: datetime | None = None
@@ -958,8 +977,8 @@ class MyQueuePublic(SQLModel):
 
 # --------------------------- внешние RAG-движки ---------------------------
 
-RagProviderName = Literal["legacy", "gemini_file_search", "anythingllm"]
-IngestTarget = Literal["gemini", "anythingllm", "both"]
+RagProviderName = Literal["legacy", "search_only", "gemini_file_search", "anythingllm"]
+IngestTarget = Literal["gemini", "anythingllm", "both", "local"]
 
 
 class AppSetting(SQLModel, table=True):
@@ -1052,6 +1071,8 @@ class IngestItemPublic(SQLModel):
     status: str
     gemini_status: str | None = None
     anythingllm_status: str | None = None
+    # Встроенная база знаний (Postgres): своей колонки нет, выводится из status.
+    local_status: str | None = None
     error: str | None = None
     started_at: datetime | None = None
     finished_at: datetime | None = None
@@ -1087,3 +1108,42 @@ class EngineDocumentsPublic(SQLModel):
     error: str | None = None
     data: list[EngineDocument]
     count: int
+
+
+# --------------------------- классификатор тем ---------------------------
+
+
+class IntentCategoryPublic(SQLModel):
+    name: str
+    label: str
+
+
+class IntentStatusPublic(SQLModel):
+    enabled: bool
+    threshold: float = Field(ge=0.0, le=1.0)
+    service_url: str
+    # Ответил ли сервис на /health и загружена ли в нём модель.
+    reachable: bool = False
+    model_loaded: bool = False
+    error: str | None = None
+    categories: list[IntentCategoryPublic] = Field(default_factory=list)
+
+
+class IntentTestRequest(SQLModel):
+    question: str = Field(min_length=1, max_length=4000)
+
+
+class IntentCandidatePublic(SQLModel):
+    category: str
+    label: str
+    confidence: float
+
+
+class IntentTestPublic(SQLModel):
+    # None, когда уверенность ниже порога: так тема и не запишется в журнал.
+    intent: str | None = None
+    intent_label: str | None = None
+    confidence: float = 0.0
+    threshold: float
+    candidates: list[IntentCandidatePublic] = Field(default_factory=list)
+    error: str | None = None
