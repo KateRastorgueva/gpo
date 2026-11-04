@@ -313,6 +313,18 @@ def parse_gemini_response(body: dict) -> ProviderAnswer:  # type: ignore[type-ar
     )
 
 
+def anythingllm_chat_payload(question: str) -> dict[str, Any]:
+    # Без sessionId AnythingLLM складывает все API-запросы workspace в одну общую
+    # историю и подмешивает прошлые ответы в промпт: модель повторяет из них числа
+    # и названия документов, которых нет в найденных фрагментах. Каждый вопрос
+    # у нас самостоятельный, поэтому у каждого запроса своя пустая сессия.
+    return {
+        "message": question,
+        "mode": "query",
+        "sessionId": f"support-{uuid.uuid4()}",
+    }
+
+
 def ask_anythingllm(question: str) -> ProviderAnswer:
     if not live_settings.ANYTHINGLLM_API_KEY:
         raise RuntimeError("ANYTHINGLLM_API_KEY is not configured")
@@ -321,7 +333,7 @@ def ask_anythingllm(question: str) -> ProviderAnswer:
         f"{live_settings.ANYTHINGLLM_WORKSPACE}/chat"
     )
     headers = {"Authorization": f"Bearer {live_settings.ANYTHINGLLM_API_KEY}"}
-    payload = {"message": question, "mode": "query"}
+    payload = anythingllm_chat_payload(question)
     with httpx.Client(timeout=live_settings.RAG_PROVIDER_TIMEOUT_SECONDS) as client:
         response = client.post(url, headers=headers, json=payload)
         response.raise_for_status()

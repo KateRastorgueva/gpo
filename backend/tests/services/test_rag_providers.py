@@ -53,6 +53,15 @@ def test_gemini_answer_without_chunks_is_not_grounded() -> None:
     assert not result.grounded
 
 
+def test_anythingllm_payload_uses_fresh_session_per_question() -> None:
+    first = rag_providers.anythingllm_chat_payload("Вопрос")
+    second = rag_providers.anythingllm_chat_payload("Вопрос")
+    assert first["message"] == "Вопрос"
+    assert first["mode"] == "query"
+    assert first["sessionId"].startswith("support-")
+    assert first["sessionId"] != second["sessionId"]
+
+
 def test_anythingllm_refusal_is_not_grounded() -> None:
     body = {
         "textResponse": "There is no relevant information in this workspace to answer your query.",
