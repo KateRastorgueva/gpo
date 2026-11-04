@@ -119,6 +119,7 @@ export function RequestsPanel() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Вопрос</TableHead>
+                  <TableHead className="w-40">Тема</TableHead>
                   <TableHead className="w-24">Режим</TableHead>
                   <TableHead className="w-32">Статус</TableHead>
                   <TableHead className="w-28">Уверенность</TableHead>
@@ -130,6 +131,11 @@ export function RequestsPanel() {
                   <TableRow key={item.request_id}>
                     <TableCell className="max-w-md truncate">
                       {item.question}
+                    </TableCell>
+                    <TableCell className="text-sm">
+                      {item.intent_label ?? (
+                        <span className="text-muted-foreground">—</span>
+                      )}
                     </TableCell>
                     <TableCell>
                       <ModeBadge mode={item.mode} />

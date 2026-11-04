@@ -121,6 +121,11 @@ export function TicketsPanel() {
           >
             <div className="flex flex-wrap items-center gap-2">
               <StatusBadge status={ticket.status} />
+              {ticket.intent_label ? (
+                <span className="rounded-md bg-muted px-2 py-0.5 text-xs">
+                  {ticket.intent_label}
+                </span>
+              ) : null}
               {ticket.reopened_from_id ? (
                 <span className="text-xs text-muted-foreground">
                   переоткрыт

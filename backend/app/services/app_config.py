@@ -107,6 +107,13 @@ GROUPS: tuple[GroupSpec, ...] = (
         "Пороги уверенности встроенного поиска. Меняйте по одному и проверяйте на типовых вопросах.",
     ),
     GroupSpec(
+        "intent",
+        "@ksup/intent-classifier",
+        "Классификатор тем",
+        "Модель Кати называет тему вопроса (стипендия, общежитие, ГПО…) для журнала, "
+        "очереди оператора и метрик. Нужен контейнер: docker compose --profile intent up -d intent.",
+    ),
+    GroupSpec(
         "offtopic",
         "@ksup/offtopic",
         "Фильтр офтопа",
@@ -378,6 +385,35 @@ SPECS: tuple[SettingSpec, ...] = (
         "int",
         minimum=1,
         maximum=50,
+    ),
+    SettingSpec(
+        "INTENT_CLASSIFIER_ENABLED",
+        "intent",
+        "enabled",
+        "Классификатор включён",
+        "bool",
+        "Выключен — обращения сохраняются без темы, как раньше.",
+        default=False,
+    ),
+    SettingSpec(
+        "INTENT_CLASSIFIER_THRESHOLD",
+        "intent",
+        "threshold",
+        "Порог уверенности",
+        "float",
+        "Ниже порога тема не записывается. Проверить вопрос — вкладка «Классификатор тем».",
+        minimum=0,
+        maximum=1,
+        default=0.5,
+    ),
+    SettingSpec(
+        "INTENT_CLASSIFIER_URL",
+        "intent",
+        "serviceUrl",
+        "Адрес сервиса",
+        "url",
+        "В Docker — http://intent:8000.",
+        default="http://intent:8000",
     ),
 )
 
