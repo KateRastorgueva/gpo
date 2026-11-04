@@ -2,9 +2,74 @@
  "_comment": "Эталон папки tusur docs: имена, размеры и SHA-256 правильных PDF. Проверяется scripts/sync_tusur_docs.ps1.",
  "files": [
   {
+   "name": "01.12.2021.pdf",
+   "bytes": 544775,
+   "sha256": "e8b1c2206e4b8251c8359460bd5c4af114891ef295def7c4771feb6fee99562d"
+  },
+  {
+   "name": "09.09.26-Polozhenie_o_poryadke_rassmotreniya_obrascheniya_grazhdan.pdf",
+   "bytes": 2940618,
+   "sha256": "5d3afc4c6000584c532b716c0cb2aee9fa75d017c9867baa9cb486299505907e"
+  },
+  {
+   "name": "2024_(3).pdf",
+   "bytes": 341980,
+   "sha256": "0677ecf5ec27efff15f3983a206f08253b038f248e628f2d7832dec8a31213e3"
+  },
+  {
    "name": "2026-27-.pdf",
    "bytes": 853369,
    "sha256": "049574b230693deaa6c52ee87f3809b2172f4941a9670b2e14fa39d4cfe6effd"
+  },
+  {
+   "name": "64026.pdf",
+   "bytes": 534210,
+   "sha256": "1005ff73752f58293795063a251f674b7e6415ba18e342d6d0a27e1308a3e345"
+  },
+  {
+   "name": "739(1).pdf",
+   "bytes": 297855,
+   "sha256": "5ab54faff506eecc04b17ac54738ab63621cb0f521860a00e23770618d66d517"
+  },
+  {
+   "name": "75677.pdf",
+   "bytes": 349998,
+   "sha256": "fb8a1902305afa780dbdbf88bfa9bc0bb4ea918cf70efcb1215f0aa2b1c28bb9"
+  },
+  {
+   "name": "75784.pdf",
+   "bytes": 276723,
+   "sha256": "32a1f2940231bf8ad04c87952a34920c3b5aa9ce73401e944c17f126e04981d9"
+  },
+  {
+   "name": "789.pdf",
+   "bytes": 214400,
+   "sha256": "5a3e792785a67d788a712af5de93f282fb8f2ca21399ec98bebde6be99793900"
+  },
+  {
+   "name": "830(1).pdf",
+   "bytes": 256290,
+   "sha256": "d2b261c675e05de88442aef4b93a37ca352c17f63beb5a22750261e0c813599f"
+  },
+  {
+   "name": "Dogovor_PVZ_v_26-27(s_05.09.26)_(zachislenie,_vosst,_perevod).pdf",
+   "bytes": 277967,
+   "sha256": "ae4d1482a4c291ef3a24aaf0a9ce1c0cb433e599c54abe14d035c1572841765c"
+  },
+  {
+   "name": "Dogovor_nayma_ghilogo_pomescheniya_v_studencheskom_obscheghitii(1).pdf",
+   "bytes": 280290,
+   "sha256": "cd13c9d742d26b595e5ae00eedbcecb615463f04a51a683e00c327a89fa07acb"
+  },
+  {
+   "name": "Dovor_na_2026-27(Aspiranty)(1).pdf",
+   "bytes": 293058,
+   "sha256": "583c45dc6d81012ece0f95faf449d81e7b8781c06ce905884f90c04b19f6272a"
+  },
+  {
+   "name": "Grafik_vyplaty_stipendii(1).pdf",
+   "bytes": 100550,
+   "sha256": "e2f06f3a7842bfeb7e1d4daab25539eff560c4ece7603beef532370cc56e68b1"
   },
   {
    "name": "Izmeneniya_ustav.pdf",
@@ -20,6 +85,11 @@
    "name": "Izmeneniya_v_ustav_TUSURa_16.03.2020.pdf",
    "bytes": 1907994,
    "sha256": "671c5d5154f611726a372c5bb0ff47c868c8f367900efa09b1c7319d8657309f"
+  },
+  {
+   "name": "KPVR_TUSUR_2026-2027.pdf",
+   "bytes": 10517250,
+   "sha256": "94d2dabadcaa347b34dd7c6c5826aae3322c531c537b2595adb47e99591ed12a"
   },
   {
    "name": "Kollektivnyi_dogovor_2024.pdf",
@@ -52,6 +122,11 @@
    "sha256": "d700a2c3a528d1b063f2edc4aeeb0dab8463bc269b924fa8034af130a19d7f13"
   },
   {
+   "name": "Pologhenie_o_stipendialynom_obespechenii_(izm_20.07.2026_No721).pdf",
+   "bytes": 344742,
+   "sha256": "fc66aed99a6862592cdaa12de4ca26c6eb663cecd6a3a60cfdff1b9b1e1485b1"
+  },
+  {
    "name": "Pologhenie_o_vnutrennei_sisteme_ocenki_kachestva_obrazovaniya.pdf",
    "bytes": 598710,
    "sha256": "25910f77dc51b160f2a1785b4e8934fa1da0279536edf25956e81ca96ebfb6c7"
@@ -60,6 +135,31 @@
    "name": "Pologhenie_ob_otdele_normativnogo_obespecheniya.pdf",
    "bytes": 435559,
    "sha256": "441ec8780640c043fea7197d413815bde25ccd9d28fee5865b4c69882211f839"
+  },
+  {
+   "name": "Polozhenie_Issledovatelskaya_magistratura.pdf",
+   "bytes": 8522893,
+   "sha256": "84193c5b38dfd1c4594a45d2b8177c65711468d633e9769c89f79fe06149026e"
+  },
+  {
+   "name": "Polozhenie_MP_05_05_25_aktualnoe.pdf",
+   "bytes": 297076,
+   "sha256": "accc39b076362752acbeadf576afa491057f2e0c227a49f3dbfa5be05776f81c"
+  },
+  {
+   "name": "Polozhenie_POU_22-23.pdf",
+   "bytes": 1304723,
+   "sha256": "2af4c9cc1fa8ef21fb57f483429dd850ca275f52b54bdba9ebe6e155e0f43c86"
+  },
+  {
+   "name": "Polozhenie_o_Studencheskom_obschezhitii_(2).pdf",
+   "bytes": 564476,
+   "sha256": "7c10198a77cc4da89bec9404f0000adfd7e30d5f8a3f97dc44ba980705ecd580"
+  },
+  {
+   "name": "Polozhenie_o_vnutrennem_otbore_obuchayuschihsya_090304_(1)_(1).pdf",
+   "bytes": 179180,
+   "sha256": "a4f3d764926d24eca45a4f6ed0eb32aceddb898356c6f7bb34a669ee187e4e44"
   },
   {
    "name": "Polozheniye_po_provedeniyu_tekushchego_kontrolya_uspevayemosti_i.pdf",
@@ -77,6 +177,11 @@
    "sha256": "365ec42aa4df82b8224498c3fffef2308c19f63f8c8cb5bf92f5d591ba03b444"
   },
   {
+   "name": "Pravila_naznacheniya_PGAS_za_dostigheniya_(utv._No_754_05.08.2026).pdf",
+   "bytes": 361012,
+   "sha256": "3c2e014823c4f6baa40a83adbe9b607c5ed729cfc99536bcbd72e443d657db18"
+  },
+  {
    "name": "Pravila_priema_2026.pdf",
    "bytes": 2301016,
    "sha256": "1c20b64cf471a1ba3f8fdf5ae1b9b7e2bfe44f8db31cbd8ed88517363d78ae02"
@@ -87,9 +192,59 @@
    "sha256": "e8ecad9c07aa0e655ca8fc7d829df93e6538835a948bbe13738f64b167c0c88f"
   },
   {
+   "name": "Prikaz_No_527_ot_26.05.26_ob_oplate_za_obuchenie_v_26-27_(aspiranty_zaochniki)(1).pdf",
+   "bytes": 234925,
+   "sha256": "3d852027bbf273d65d1f4fe2d22566a454ca1857855c6efdf8cae60437dff158"
+  },
+  {
+   "name": "Prikaz_No_528_ot_26.05.26_ob_oplate_za_obuchenie_v_26-27_(aspiranty_ochniki)(1).pdf",
+   "bytes": 278720,
+   "sha256": "536ff900a8fe735c902ea7ac7071e6142da8e1b923ce6acf37cfb7f13d914ada"
+  },
+  {
+   "name": "Prikaz_No_529_ot_26.05.26_(stoimosty_v_2026-27_ochniki)(1).pdf",
+   "bytes": 336192,
+   "sha256": "bdeb0e9bb8d5c0f2120a12ee2bc9a1dfe9605fc022950b63cf7633405e4ca770"
+  },
+  {
+   "name": "Prikaz_No_559_ot_02.06.2_na_2026-27_(ZiVF)_(1).pdf",
+   "bytes": 248448,
+   "sha256": "62ba9f0747138a923da82cddab99c0a548496b26223aef8d588eb0af5ed8cabd"
+  },
+  {
+   "name": "Prikaz_o_razmere_PGAS_osen_sem_26_27.pdf",
+   "bytes": 212331,
+   "sha256": "b04f7b224149361130da18a9229fb2f0c61cffac383a4ed2d7bf29d8269d6e15"
+  },
+  {
+   "name": "Prikaz_stoimosty_po_FDO_2026_(No1237_ot_09.12.25)(1).pdf",
+   "bytes": 242195,
+   "sha256": "18eed75acf8b4b2ecdf6472694db51d85a4c8ef03563b35fa8e56fcaf49e1da5"
+  },
+  {
+   "name": "Reestrovaya_vypiska.pdf",
+   "bytes": 140677,
+   "sha256": "971428eda273e9de4e3d2cc2d04f2694f222dd81765b290574f6c0b8f0a33dcf"
+  },
+  {
    "name": "Reghim_zanyatiy_obuchayuschixsya_ot_16.05.2019(1).pdf",
    "bytes": 747614,
    "sha256": "2a47992cc292869e3f1d69f0998ad1a895aa00dcf2213ef74fb18def21962f0d"
+  },
+  {
+   "name": "Reglament_raboty_s_obrascheniyami.pdf",
+   "bytes": 1937023,
+   "sha256": "ed29fa887fdb5dfadd02be9e613d9dfaad89109114700f4608a26607b0530668"
+  },
+  {
+   "name": "Sredstva_obucheniya_i_vospitaniya_v_TUSURe(2).pdf",
+   "bytes": 449286,
+   "sha256": "060f5baeda9765ccb65314ad5e14b4342ac4dbf86c0e09ea1d3eac38a31366b5"
+  },
+  {
+   "name": "Svedeniya_o_perevode,_vosstanovlenii_i_otchislenii.pdf",
+   "bytes": 76012,
+   "sha256": "74b09e47cd58bd16e94cd57f7bf4d676e203d0ec93206e6da683ee9f56d8dc1c"
   },
   {
    "name": "Ustav_2018.pdf",
@@ -100,6 +255,31 @@
    "name": "Ustav_FGAOU_TUSUR_24(1).pdf",
    "bytes": 12432735,
    "sha256": "786bf4b618905de05910b6f4a7cbea83c7c947ae89f2f2cf24bafba120fca48b"
+  },
+  {
+   "name": "mto-report-2024-07-31.pdf",
+   "bytes": 2248296,
+   "sha256": "3c44a2ccbd43a9e9d4eaf0395c5c17d68c2844806f4a93de82af35075eb696f6"
+  },
+  {
+   "name": "pologhenie_MP_TUSUR.pdf",
+   "bytes": 6192206,
+   "sha256": "78c5e209a52b42231a25bad26034ab1fb8510a6aa2e8aa03ce82672f37c6a5ad"
+  },
+  {
+   "name": "postanovlenie-1802.pdf",
+   "bytes": 410272,
+   "sha256": "c0ced0ea22fee425b01e0561514351e44878756579d34bc8dc0b53e261a3619b"
+  },
+  {
+   "name": "pr.959_ot_01.10.26_O_vvedenii_Polozheniya_ob_Otdelenii_fundamentalnyh_i_obscheinzhenernyh_nauk_(1).pdf",
+   "bytes": 3279261,
+   "sha256": "73f9484cf327138df23297a700dd2c896ccee926715caada911b0b5824262ddc"
+  },
+  {
+   "name": "statya-29.pdf",
+   "bytes": 289855,
+   "sha256": "e656c823a734cb16f0f15057d1b1248190c130b29202dc7bee9097d2c9c63dc0"
   }
  ]
 }
