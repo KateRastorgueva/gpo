@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { RefreshCw, Upload } from "lucide-react"
-import { useState } from "react"
+import { useEffect, useRef, useState } from "react"
 
 import { EmptyState, formatDateTime } from "@/components/Support/display"
 import { Badge } from "@/components/ui/badge"
@@ -140,12 +140,39 @@ function ProviderCard({ canWrite }: { canWrite: boolean }) {
   )
 }
 
-function UploadCard({ onStarted }: { onStarted: () => void }) {
+const providerTarget = (provider?: RagProviderName): IngestTarget =>
+  provider === "gemini_file_search"
+    ? "gemini"
+    : provider === "anythingllm"
+      ? "anythingllm"
+      : "local"
+
+export function UploadCard({
+  onStarted,
+  title = "Загрузка документов в движки",
+}: {
+  onStarted: () => void
+  title?: string
+}) {
+  const providerQuery = useQuery({
+    queryKey: ["ragProvider"],
+    queryFn: getRagProvider,
+  })
+  const [targetTouched, setTargetTouched] = useState(false)
+  const [dragging, setDragging] = useState(false)
+  const inputRef = useRef<HTMLInputElement>(null)
   const { showErrorToast, showSuccessToast } = useCustomToast()
   const [files, setFiles] = useState<File[]>([])
   const [target, setTarget] = useState<IngestTarget>("both")
   const [sent, setSent] = useState(0)
   const [busy, setBusy] = useState(false)
+
+  // По умолчанию грузим в активный движок, пока пользователь не выбрал сам
+  useEffect(() => {
+    if (!targetTouched && providerQuery.data) {
+      setTarget(providerTarget(providerQuery.data.active))
+    }
+  }, [providerQuery.data, targetTouched])
 
   const start = async () => {
     if (!files.length) return
@@ -181,14 +208,40 @@ function UploadCard({ onStarted }: { onStarted: () => void }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Загрузка документов в движки</CardTitle>
+        <CardTitle>{title}</CardTitle>
       </CardHeader>
       <CardContent className="grid gap-3">
         <div className="grid gap-3 md:grid-cols-[1fr_260px]">
           <div className="grid gap-2">
             <Label htmlFor="ingest-files">Файлы (можно выбрать много)</Label>
+            <button
+              type="button"
+              className={`flex cursor-pointer flex-col items-center justify-center rounded-md border border-dashed px-3 py-4 text-center text-sm text-muted-foreground transition-colors ${
+                dragging ? "border-primary bg-muted" : ""
+              }`}
+              onClick={() => !busy && inputRef.current?.click()}
+              onDragOver={(event) => {
+                event.preventDefault()
+                setDragging(true)
+              }}
+              onDragLeave={() => setDragging(false)}
+              onDrop={(event) => {
+                event.preventDefault()
+                setDragging(false)
+                if (!busy) setFiles(Array.from(event.dataTransfer.files))
+              }}
+            >
+              <Upload className="mb-1 size-4" />
+              {files.length
+                ? files.length <= 3
+                  ? files.map((file) => file.name).join(", ")
+                  : `Выбрано файлов: ${files.length}`
+                : "Перетащите файлы сюда или нажмите, чтобы выбрать"}
+            </button>
             <Input
+              ref={inputRef}
               id="ingest-files"
+              className="hidden"
               type="file"
               multiple
               accept=".pdf,.docx,.doc,.txt,.md,.html,.xlsx,.pptx"
@@ -202,7 +255,10 @@ function UploadCard({ onStarted }: { onStarted: () => void }) {
             <Label>Куда загрузить</Label>
             <Select
               value={target}
-              onValueChange={(value) => setTarget(value as IngestTarget)}
+              onValueChange={(value) => {
+                setTargetTouched(true)
+                setTarget(value as IngestTarget)
+              }}
               disabled={busy}
             >
               <SelectTrigger>
@@ -247,7 +303,7 @@ function UploadCard({ onStarted }: { onStarted: () => void }) {
   )
 }
 
-function JobCard({ job }: { job: IngestJob }) {
+export function JobCard({ job }: { job: IngestJob }) {
   const processed = job.done + job.failed
   const percent = Math.round((processed / job.total) * 100)
   const eta = formatEta(job.eta_seconds)
