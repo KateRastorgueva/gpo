@@ -1,6 +1,7 @@
 """Внешние RAG-движки, подключаемые вместо собственного поиска.
 
-Переключатель ``RAG_PROVIDER`` выбирает, кто отвечает после промаха FAQ:
+Кто отвечает после промаха FAQ, выбирает админ в «Управлении» (таблица
+``app_setting``); пока выбора нет, действует ``RAG_PROVIDER`` из окружения:
 
 * ``legacy`` — собственный поиск Postgres + Qdrant (``support_service``);
 * ``gemini_file_search`` — Google Gemini File Search (хранилище в облаке Google);
@@ -12,12 +13,25 @@
 ``support_service.run_support_pipeline``.
 """
 
+import json
+import time
 import uuid
 from dataclasses import dataclass, field
+from typing import Any
 
 import httpx
+from sqlmodel import Session
 
 from app.core.config import settings
+from app.models import AppSetting, EngineDocument, get_datetime_utc
+
+EXTERNAL_PROVIDERS = {"gemini_file_search", "anythingllm"}
+PROVIDER_LABELS = {
+    "gemini_file_search": "Облако — Gemini File Search",
+    "anythingllm": "Локально — AnythingLLM",
+    "legacy": "Встроенный поиск (Postgres + Qdrant)",
+}
+PROVIDER_SETTING_KEY = "rag_provider"
 
 NO_ANSWER_MARKER = "НЕТ_ОТВЕТА"
 
@@ -58,18 +72,47 @@ class ProviderAnswer:
     sources: list[ProviderSource] = field(default_factory=list)
 
 
-def is_external_provider_enabled() -> bool:
-    return settings.RAG_PROVIDER in {"gemini_file_search", "anythingllm"}
+def get_active_provider(session: Session) -> str:
+    """Движок, выбранный админом; без выбора — ``RAG_PROVIDER`` из окружения."""
+    row = session.get(AppSetting, PROVIDER_SETTING_KEY)
+    if row and row.value in PROVIDER_LABELS:
+        return row.value
+    return settings.RAG_PROVIDER
 
 
-def ask_provider(question: str) -> ProviderAnswer:
-    """Отправляет вопрос во внешний движок, выбранный ``RAG_PROVIDER``."""
+def set_active_provider(session: Session, provider: str) -> None:
+    if provider not in PROVIDER_LABELS:
+        raise ValueError(f"Unknown RAG provider: {provider}")
+    row = session.get(AppSetting, PROVIDER_SETTING_KEY) or AppSetting(
+        key=PROVIDER_SETTING_KEY, value=provider
+    )
+    row.value = provider
+    row.updated_at = get_datetime_utc()
+    session.add(row)
+    session.commit()
 
-    if settings.RAG_PROVIDER == "gemini_file_search":
+
+def is_provider_configured(provider: str) -> bool:
+    if provider == "gemini_file_search":
+        return bool(settings.gemini_api_key and settings.GEMINI_FILE_SEARCH_STORE)
+    if provider == "anythingllm":
+        return bool(settings.ANYTHINGLLM_API_KEY)
+    return provider == "legacy"
+
+
+def is_external_provider_enabled(provider: str | None = None) -> bool:
+    return (provider or settings.RAG_PROVIDER) in EXTERNAL_PROVIDERS
+
+
+def ask_provider(question: str, provider: str | None = None) -> ProviderAnswer:
+    """Отправляет вопрос во внешний движок (по умолчанию — ``RAG_PROVIDER``)."""
+
+    provider = provider or settings.RAG_PROVIDER
+    if provider == "gemini_file_search":
         return ask_gemini_file_search(question)
-    if settings.RAG_PROVIDER == "anythingllm":
+    if provider == "anythingllm":
         return ask_anythingllm(question)
-    raise RuntimeError(f"Unknown external RAG_PROVIDER: {settings.RAG_PROVIDER}")
+    raise RuntimeError(f"Unknown external RAG_PROVIDER: {provider}")
 
 
 # Модель иногда пишет маркер латиницей вперемешку с кириллицей: «НЕТ_OTBETА».
@@ -218,3 +261,207 @@ def parse_anythingllm_response(body: dict) -> ProviderAnswer:  # type: ignore[ty
         confidence=round(min(1.0, confidence), 4) if grounded else 0.0,
         sources=sources,
     )
+
+
+# ------------------------- загрузка документов в движки -------------------------
+#
+# Используются админской пакетной загрузкой (``rag_ingest``). Функции загрузки
+# возвращают статус файла: ``ok`` — загружен и проиндексирован, ``already`` —
+# документ с таким именем уже есть, ``no-text`` — AnythingLLM не извлёк текст
+# (скан без текстового слоя: сам AnythingLLM OCR не делает, Gemini — делает).
+
+GEMINI_OPERATION_TIMEOUT_SECONDS = 600
+GEMINI_POLL_SECONDS = 3.0
+
+
+def _gemini_upload_base() -> str:
+    # https://host/v1beta -> https://host/upload/v1beta
+    url = httpx.URL(settings.GOOGLE_API_URL)
+    return f"{url.scheme}://{url.netloc.decode()}/upload{url.path.rstrip('/')}"
+
+
+def _require_gemini() -> tuple[str, str]:
+    api_key = settings.gemini_api_key
+    if not api_key:
+        raise RuntimeError("GEMINI_API_KEY is not configured")
+    if not settings.GEMINI_FILE_SEARCH_STORE:
+        raise RuntimeError("GEMINI_FILE_SEARCH_STORE is not configured")
+    return api_key, settings.GEMINI_FILE_SEARCH_STORE
+
+
+def list_gemini_documents(client: httpx.Client | None = None) -> list[EngineDocument]:
+    api_key, store = _require_gemini()
+    own = client is None
+    client = client or httpx.Client(timeout=60)
+    docs: list[EngineDocument] = []
+    try:
+        token: str | None = None
+        while True:
+            params: dict[str, Any] = {"pageSize": 20}
+            if token:
+                params["pageToken"] = token
+            response = client.get(
+                f"{settings.GOOGLE_API_URL}/{store}/documents",
+                headers={"X-goog-api-key": api_key},
+                params=params,
+            )
+            response.raise_for_status()
+            body = response.json()
+            for doc in body.get("documents") or []:
+                size = doc.get("sizeBytes")
+                state = str(doc.get("state") or "").removeprefix("STATE_")
+                docs.append(
+                    EngineDocument(
+                        name=str(doc.get("displayName") or doc.get("name") or ""),
+                        state=state or None,
+                        size_bytes=int(size) if size is not None else None,
+                    )
+                )
+            token = body.get("nextPageToken")
+            if not token:
+                return docs
+    finally:
+        if own:
+            client.close()
+
+
+def upload_gemini_document(
+    filename: str,
+    data: bytes,
+    mime_type: str,
+    *,
+    existing: set[str] | None = None,
+    client: httpx.Client | None = None,
+) -> str:
+    """Resumable-загрузка в File Search store — тот же протокол, что у SDK google-genai."""
+    api_key, store = _require_gemini()
+    own = client is None
+    client = client or httpx.Client(timeout=settings.RAG_PROVIDER_TIMEOUT_SECONDS)
+    try:
+        if existing is None:
+            existing = {d.name for d in list_gemini_documents(client)}
+        if filename in existing:
+            return "already"
+        start = client.post(
+            f"{_gemini_upload_base()}/{store}:uploadToFileSearchStore",
+            headers={
+                "X-goog-api-key": api_key,
+                "X-Goog-Upload-Protocol": "resumable",
+                "X-Goog-Upload-Command": "start",
+                "X-Goog-Upload-Header-Content-Length": str(len(data)),
+                "X-Goog-Upload-Header-Content-Type": mime_type,
+            },
+            json={"displayName": filename, "mimeType": mime_type},
+        )
+        start.raise_for_status()
+        upload_url = start.headers.get("x-goog-upload-url")
+        if not upload_url:
+            raise RuntimeError("Gemini did not return an upload URL")
+        finish = client.post(
+            upload_url,
+            headers={
+                "X-Goog-Upload-Command": "upload, finalize",
+                "X-Goog-Upload-Offset": "0",
+            },
+            content=data,
+        )
+        finish.raise_for_status()
+        operation = finish.json()
+        # Индексация (в т.ч. OCR сканов) идёт асинхронно: ждём завершения операции.
+        deadline = time.monotonic() + GEMINI_OPERATION_TIMEOUT_SECONDS
+        while not operation.get("done"):
+            if time.monotonic() > deadline:
+                raise RuntimeError("Gemini indexing timed out")
+            time.sleep(GEMINI_POLL_SECONDS)
+            poll = client.get(
+                f"{settings.GOOGLE_API_URL}/{operation['name']}",
+                headers={"X-goog-api-key": api_key},
+            )
+            poll.raise_for_status()
+            operation = poll.json()
+        if operation.get("error"):
+            message = operation["error"].get("message")
+            raise RuntimeError(f"Gemini indexing failed: {message}")
+        existing.add(filename)
+        return "ok"
+    finally:
+        if own:
+            client.close()
+
+
+def _anythingllm_client() -> httpx.Client:
+    if not settings.ANYTHINGLLM_API_KEY:
+        raise RuntimeError("ANYTHINGLLM_API_KEY is not configured")
+    return httpx.Client(
+        base_url=f"{settings.ANYTHINGLLM_BASE_URL.rstrip('/')}/api/v1",
+        headers={"Authorization": f"Bearer {settings.ANYTHINGLLM_API_KEY}"},
+        timeout=900,
+    )
+
+
+def _anythingllm_title(document: dict[str, Any]) -> str:
+    metadata = document.get("metadata")
+    if isinstance(metadata, str):
+        try:
+            metadata = json.loads(metadata)
+        except ValueError:
+            metadata = {}
+    if isinstance(metadata, dict) and metadata.get("title"):
+        return str(metadata["title"])
+    return str(document.get("filename") or document.get("docpath") or "")
+
+
+def list_anythingllm_documents(
+    client: httpx.Client | None = None,
+) -> list[EngineDocument]:
+    own = client is None
+    client = client or _anythingllm_client()
+    try:
+        response = client.get(f"/workspace/{settings.ANYTHINGLLM_WORKSPACE}")
+        response.raise_for_status()
+        workspace = response.json().get("workspace") or []
+        if isinstance(workspace, dict):
+            workspace = [workspace]
+        return [
+            EngineDocument(name=_anythingllm_title(document))
+            for ws in workspace
+            for document in ws.get("documents") or []
+        ]
+    finally:
+        if own:
+            client.close()
+
+
+def upload_anythingllm_document(
+    filename: str,
+    data: bytes,
+    mime_type: str,
+    *,
+    existing: set[str] | None = None,
+    client: httpx.Client | None = None,
+) -> str:
+    own = client is None
+    client = client or _anythingllm_client()
+    try:
+        if existing is None:
+            existing = {d.name for d in list_anythingllm_documents(client)}
+        if filename in existing:
+            return "already"
+        response = client.post(
+            "/document/upload", files={"file": (filename, data, mime_type)}
+        )
+        response.raise_for_status()
+        documents = response.json().get("documents") or []
+        locations = [d["location"] for d in documents if d.get("location")]
+        words = sum(int(d.get("wordCount") or 0) for d in documents)
+        if not locations or words == 0:
+            return "no-text"
+        client.post(
+            f"/workspace/{settings.ANYTHINGLLM_WORKSPACE}/update-embeddings",
+            json={"adds": locations, "deletes": []},
+        ).raise_for_status()
+        existing.add(filename)
+        return "ok"
+    finally:
+        if own:
+            client.close()

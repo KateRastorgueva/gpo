@@ -584,3 +584,90 @@ export const getSupportMetrics = () =>
     method: "GET",
     headers: authHeader(),
   })
+
+/* ---------------------------- внешние RAG-движки --------------------------- */
+
+export type RagProviderName = "gemini_file_search" | "anythingllm" | "legacy"
+export type IngestTarget = "gemini" | "anythingllm" | "both"
+export type RagEngine = "gemini" | "anythingllm"
+
+export type RagProviderState = {
+  active: RagProviderName
+  default: string
+  options: { name: RagProviderName; label: string; configured: boolean }[]
+}
+
+export type IngestItem = {
+  id: string
+  filename: string
+  size_bytes: number
+  status: "queued" | "running" | "done" | "failed"
+  gemini_status?: string | null
+  anythingllm_status?: string | null
+  error?: string | null
+  started_at?: string | null
+  finished_at?: string | null
+}
+
+export type IngestJob = {
+  id: string
+  target: IngestTarget
+  total: number
+  uploaded: number
+  done: number
+  failed: number
+  finished: boolean
+  eta_seconds?: number | null
+  created_at: string
+  items: IngestItem[]
+}
+
+export type EngineDocuments = {
+  engine: RagEngine
+  configured: boolean
+  error?: string | null
+  data: { name: string; state?: string | null; size_bytes?: number | null }[]
+  count: number
+}
+
+export const getRagProvider = () =>
+  request<RagProviderState>("/api/v1/admin/rag/provider", {
+    method: "GET",
+    headers: authHeader(),
+  })
+
+export const setRagProvider = (provider: RagProviderName) =>
+  request<RagProviderState>("/api/v1/admin/rag/provider", {
+    method: "PUT",
+    headers: jsonHeaders(),
+    body: JSON.stringify({ provider }),
+  })
+
+export const getEngineDocuments = (engine: RagEngine) =>
+  request<EngineDocuments>(`/api/v1/admin/rag/documents${query({ engine })}`, {
+    method: "GET",
+    headers: authHeader(),
+  })
+
+export const createIngestJob = (target: IngestTarget, total: number) =>
+  request<IngestJob>("/api/v1/admin/rag/ingest/jobs", {
+    method: "POST",
+    headers: jsonHeaders(),
+    body: JSON.stringify({ target, total }),
+  })
+
+export const uploadIngestFile = (jobId: string, file: File) => {
+  const formData = new FormData()
+  formData.set("file", file)
+  return request<IngestJob>(`/api/v1/admin/rag/ingest/jobs/${jobId}/files`, {
+    method: "POST",
+    headers: authHeader(),
+    body: formData,
+  })
+}
+
+export const getIngestJobs = () =>
+  request<ListResponse<IngestJob>>("/api/v1/admin/rag/ingest/jobs", {
+    method: "GET",
+    headers: authHeader(),
+  })

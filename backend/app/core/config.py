@@ -116,6 +116,13 @@ class Settings(BaseSettings):
     ANYTHINGLLM_WORKSPACE: str = "tusur"
     RAG_PROVIDER_TIMEOUT_SECONDS: int = 90
 
+    # Журнал событий хоста (JSON Lines): запросы, ответы RAG, загрузки, ошибки.
+    EVENT_LOG_ENABLED: bool = True
+    EVENT_LOG_DIR: str = "/app/logs"
+    EVENT_LOG_RETENTION_DAYS: int = 30
+    # Писать ли текст вопроса (первые 500 символов). Ответ целиком не пишется.
+    EVENT_LOG_QUESTIONS: bool = True
+
     @computed_field  # type: ignore[prop-decorator]
     @property
     def gemini_api_key(self) -> str | None:
