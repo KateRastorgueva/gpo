@@ -7,6 +7,7 @@
 """
 
 import hashlib
+import logging
 import math
 import re
 import time
@@ -73,8 +74,10 @@ from app.models import (
     TagPublic,
     User,
 )
-from app.services import rag_providers
+from app.services import dense_local, rag_providers
 from app.services.app_config import live_settings
+
+logger = logging.getLogger(__name__)
 
 CRITICAL_KEYWORDS = (
     "срок",
@@ -1279,6 +1282,7 @@ def retrieve_lexical_bm25(
     owner_types: list[str] | None = None,
     category_ids: list[uuid.UUID] | None = None,
     tag_ids: list[uuid.UUID] | None = None,
+    rows: list[tuple[KnowledgeChunk, uuid.UUID, str, str | None]] | None = None,
 ) -> tuple[list[RetrievalResult], dict[uuid.UUID, float]]:
     """BM25 по всем активным чанкам.
 
@@ -1287,9 +1291,10 @@ def retrieve_lexical_bm25(
     в корпусе, считаются максимально информативными и снижают покрытие.
     """
 
-    rows = _lexical_rows(
-        session, owner_types=owner_types, category_ids=category_ids, tag_ids=tag_ids
-    )
+    if rows is None:
+        rows = _lexical_rows(
+            session, owner_types=owner_types, category_ids=category_ids, tag_ids=tag_ids
+        )
     query_terms = set(_bm25_tokens(question))
     if not rows or not query_terms:
         return [], {}
@@ -1350,10 +1355,60 @@ def retrieve_lexical_bm25(
     return results, coverage
 
 
+def dense_search_active() -> bool:
+    """Включена ли лёгкая векторная добавка (numpy-модель без Qdrant)."""
+
+    return (
+        not vector_search_enabled()
+        and bool(live_settings.DENSE_SEARCH_ENABLED)
+        and dense_local.model_available()
+    )
+
+
+def retrieve_dense_local(
+    rows: list[tuple[KnowledgeChunk, uuid.UUID, str, str | None]], question: str
+) -> tuple[list[RetrievalResult], dict[uuid.UUID, float]]:
+    """Векторный поиск локальной моделью по тем же строкам, что и BM25.
+
+    Возвращает кандидатов по убыванию косинуса и откалиброванную оценку 0..1
+    (см. DENSE_SCORE_FLOOR/CEIL) для маршрутизации. Пока кэш векторов не
+    заполнен, чанки без вектора просто не участвуют (их досчитывает фон).
+    """
+
+    items = []
+    for chunk, _owner_id, title, _ref in rows:
+        text = dense_local.document_text(title, chunk.content)
+        items.append((dense_local.text_key(text), text))
+    try:
+        ranked, _missing = dense_local.search(question, items)
+    except Exception:
+        logger.exception("dense search failed, BM25 only")
+        return [], {}
+    limit = settings.HYBRID_CANDIDATES_LIMIT
+    scores: dict[uuid.UUID, float] = {}
+    results: list[RetrievalResult] = []
+    for pos, cosine in ranked[:limit]:
+        chunk, owner_id, owner_title, owner_ref = rows[pos]
+        score = dense_local.calibrated_score(cosine)
+        scores[chunk.id] = score
+        results.append(
+            RetrievalResult(
+                source_id=owner_id,
+                source_title=owner_title,
+                source_ref=owner_ref,
+                chunk_id=chunk.id,
+                snippet=chunk.content,
+                score=_clamp_score(score),
+            )
+        )
+    return results, scores
+
+
 def _rrf_merge(
     semantic_results: list[RetrievalResult],
     lexical_results: list[RetrievalResult],
     coverage: dict[uuid.UUID, float],
+    dense_scores: dict[uuid.UUID, float] | None = None,
 ) -> list[RetrievalResult]:
     """Объединяет списки по рангам (RRF), не смешивая несопоставимые шкалы оценок.
 
@@ -1376,11 +1431,15 @@ def _rrf_merge(
     merged: list[RetrievalResult] = []
     for key in sorted(rrf, key=lambda k: rrf[k], reverse=True):
         base = items[key]
-        score = (
-            coverage.get(base.chunk_id, 0.0)
-            if hashed and base.chunk_id
-            else blended.get(key, base.score)
-        )
+        if hashed and base.chunk_id:
+            # С векторной добавкой фрагмент, найденный по смыслу (синоним, другая
+            # форма слова), получает оценку по косинусу, даже если слов вопроса в
+            # нём мало: берётся большая из двух оценок.
+            score = coverage.get(base.chunk_id, 0.0)
+            if dense_scores:
+                score = max(score, dense_scores.get(base.chunk_id, 0.0))
+        else:
+            score = blended.get(key, base.score)
         merged.append(
             RetrievalResult(
                 source_id=base.source_id,
@@ -1416,6 +1475,13 @@ def retrieve_relevant_chunks(
     category_ids: list[uuid.UUID] | None = None,
     tag_ids: list[uuid.UUID] | None = None,
 ) -> list[RetrievalResult]:
+    if dense_search_active():
+        rows = _lexical_rows(
+            session, owner_types=owner_types, category_ids=category_ids, tag_ids=tag_ids
+        )
+        dense, dense_scores = retrieve_dense_local(rows, question)
+        lexical, coverage = retrieve_lexical_bm25(session, question, rows=rows)
+        return _rrf_merge(dense, lexical, coverage, dense_scores)
     semantic = retrieve_semantic_chunks(
         question,
         owner_types=owner_types,
