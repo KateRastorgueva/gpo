@@ -8,16 +8,7 @@ import { expect, type Page, test } from "@playwright/test"
  * поэтому его можно гонять на рабочей базе разработки.
  */
 
-const TABS = [
-  "Метрики",
-  "Очередь и журнал",
-  "Тикеты",
-  "База знаний",
-  "Документы",
-  "Категории и тэги",
-  "Поиск",
-  "Частые вопросы",
-]
+const TABS = ["Метрики", "Обращения", "Знания", "Система"]
 
 /** Заголовок карточки: CardTitle рендерится как div, а не как heading. */
 const cardTitle = (page: Page, text: string) =>
@@ -71,24 +62,27 @@ test("admin support page renders all tabs with data", async ({ page }) => {
   }
 
   // Тикеты: либо список тикетов, либо пустое состояние
+  await page.getByRole("tab", { name: "Обращения" }).click()
   await page.getByRole("tab", { name: "Тикеты" }).click()
   await expect(cardTitle(page, "Тикеты")).toBeVisible()
   await expect(page.getByText(/активных из \d+|Тикетов нет/)).toBeVisible()
 
   // База знаний: таблица источников с колонкой действий
-  await page.getByRole("tab", { name: "База знаний" }).click()
+  await page.getByRole("tab", { name: "Знания" }).click()
+  await page.getByRole("tab", { name: "Источники" }).click()
   await expect(cardTitle(page, "Источники знаний")).toBeVisible()
   await expect(
     page.getByRole("button", { name: "Переиндексировать источники" }),
   ).toBeVisible()
 
   // Таксономия: формы создания категории и тэга
+  await page.getByRole("tab", { name: "Знания" }).click()
   await page.getByRole("tab", { name: "Категории и тэги" }).click()
   await expect(cardTitle(page, "Категории знаний")).toBeVisible()
   await expect(cardTitle(page, "Тэги")).toBeVisible()
 
   // Поиск: реальный запрос к API с фильтрами
-  await page.getByRole("tab", { name: "Поиск" }).click()
+  await page.getByRole("tab", { name: "Проверка поиска" }).click()
   await page.getByPlaceholder("Поисковый запрос").fill("поступление")
   await page.getByRole("button", { name: "Найти" }).click()
   await expect(
@@ -103,6 +97,7 @@ test("admin support page renders all tabs with data", async ({ page }) => {
 test("taxonomy create and delete round trip", async ({ page }) => {
   const name = `smoke-category-${Date.now()}`
   await page.goto("/admin-support")
+  await page.getByRole("tab", { name: "Знания" }).click()
   await page.getByRole("tab", { name: "Категории и тэги" }).click()
 
   const categoryCard = page.locator('[data-slot="card"]', {

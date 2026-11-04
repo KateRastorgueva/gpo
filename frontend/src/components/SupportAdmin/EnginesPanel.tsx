@@ -461,14 +461,14 @@ function EngineDocumentsCard() {
   )
 }
 
+// Вкладка «Движок»: выбор движка и то, что в нём лежит.
+// Загрузка файлов живёт в «Документы», чтобы не было двух мест для одного.
 export function EnginesPanel() {
   const { has } = usePermissions()
   const canWrite = has(PERMISSIONS.KNOWLEDGE_WRITE)
-  const queryClient = useQueryClient()
   const jobsQuery = useQuery({
     queryKey: ["ingestJobs"],
     queryFn: getIngestJobs,
-    // Пока есть незавершённая загрузка, опрашиваем прогресс каждые 2,5 с.
     refetchInterval: (query) =>
       query.state.data?.data.some((job) => !job.finished) ? 2500 : false,
   })
@@ -477,13 +477,6 @@ export function EnginesPanel() {
   return (
     <div className="grid gap-4">
       <ProviderCard canWrite={canWrite} />
-      {canWrite ? (
-        <UploadCard
-          onStarted={() =>
-            queryClient.invalidateQueries({ queryKey: ["ingestJobs"] })
-          }
-        />
-      ) : null}
       {latest ? <JobCard job={latest} /> : null}
       <EngineDocumentsCard />
     </div>
