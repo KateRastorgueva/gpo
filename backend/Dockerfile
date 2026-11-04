@@ -42,6 +42,11 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     --mount=type=bind,source=backend/pyproject.toml,target=backend/pyproject.toml \
     uv sync --package app
 
+ARG GIT_SHA=unknown
+ARG GIT_BRANCH=unknown
+ARG BUILD_TIME=unknown
+ENV GIT_SHA=$GIT_SHA GIT_BRANCH=$GIT_BRANCH BUILD_TIME=$BUILD_TIME
+
 WORKDIR /app/backend/
 
 CMD ["fastapi", "run", "--workers", "4", "app/main.py"]

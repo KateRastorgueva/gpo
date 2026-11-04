@@ -1,5 +1,6 @@
 import { FaGithub, FaLinkedinIn } from "react-icons/fa"
 import { FaXTwitter } from "react-icons/fa6"
+import { BuildVersion } from "@/components/Common/BuildVersion"
 
 const socialLinks = [
   {
@@ -24,6 +25,7 @@ export function Footer() {
         <p className="text-muted-foreground text-sm">
           Full Stack FastAPI Template - {currentYear}
         </p>
+        <BuildVersion />
         <div className="flex items-center gap-4">
           {socialLinks.map(({ icon: Icon, href, label }) => (
             <a
