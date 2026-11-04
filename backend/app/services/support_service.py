@@ -36,6 +36,7 @@ from app.models import (
     FaqEntryCreate,
     FaqEntryPublic,
     FaqEntryUpdate,
+    IntentMetric,
     JournalRequestPublic,
     KnowledgeArchive,
     KnowledgeArchivePublic,
@@ -73,7 +74,7 @@ from app.models import (
     TagPublic,
     User,
 )
-from app.services import rag_providers
+from app.services import intent_classifier, rag_providers
 from app.services.app_config import live_settings
 
 CRITICAL_KEYWORDS = (
@@ -1570,6 +1571,8 @@ def _record_support_result(
     """Сохраняет запрос, ответ, источники и при необходимости очередь оператора."""
 
     recorded_at = datetime.now(timezone.utc)
+    # Тема для журнала, очереди и метрик; на маршрут ответа пока не влияет.
+    intent, intent_confidence = intent_classifier.classify_for_request(payload.question)
     request = SupportRequest(
         user_id=user_id,
         session_id=session_id,
@@ -1579,6 +1582,8 @@ def _record_support_result(
         confidence=confidence,
         fallback_used=fallback_used,
         escalated=escalated,
+        intent=intent,
+        intent_confidence=intent_confidence,
         # Эскалация оставляет запрос в очереди (queued), иначе он сразу отвечен.
         status="queued" if escalated else "answered",
         updated_at=recorded_at,
@@ -3095,13 +3100,17 @@ def search_knowledge(
     ]
 
 
-def _to_ticket_public(ticket: SupportTicket, question: str) -> SupportTicketPublic:
+def _to_ticket_public(
+    ticket: SupportTicket, question: str, intent: str | None = None
+) -> SupportTicketPublic:
     return SupportTicketPublic(
         ticket_id=ticket.id,
         request_id=ticket.request_id,
         reason=ticket.reason,
         status=ticket.status,
         question=question,
+        intent=intent,
+        intent_label=intent_classifier.label_for(intent),
         assigned_to=ticket.assigned_to,
         resolution=ticket.resolution,
         reopened_from_id=ticket.reopened_from_id,
@@ -3150,7 +3159,8 @@ def assign_ticket(
     session.add(ticket)
     session.commit()
     session.refresh(ticket)
-    return _to_ticket_public(ticket, _request_for_ticket(session, ticket).question)
+    request = _request_for_ticket(session, ticket)
+    return _to_ticket_public(ticket, request.question, request.intent)
 
 
 def resolve_ticket(
@@ -3196,7 +3206,7 @@ def resolve_ticket(
 
     session.commit()
     session.refresh(ticket)
-    return _to_ticket_public(ticket, request.question)
+    return _to_ticket_public(ticket, request.question, request.intent)
 
 
 def reopen_ticket(
@@ -3243,7 +3253,7 @@ def reopen_ticket(
 
     session.commit()
     session.refresh(new_ticket)
-    return _to_ticket_public(new_ticket, request.question)
+    return _to_ticket_public(new_ticket, request.question, request.intent)
 
 
 def create_feedback(
@@ -3302,7 +3312,7 @@ def list_operator_queue(session: Session) -> list[SupportTicketPublic]:
         request = request_map.get(ticket.request_id)
         if not request:
             continue
-        response.append(_to_ticket_public(ticket, request.question))
+        response.append(_to_ticket_public(ticket, request.question, request.intent))
     return response
 
 
@@ -3404,6 +3414,9 @@ def list_journal_requests(
             status=row.status,
             confidence=row.confidence,
             escalated=row.escalated,
+            intent=row.intent,
+            intent_label=intent_classifier.label_for(row.intent),
+            intent_confidence=row.intent_confidence,
             created_at=row.created_at,
             answered_at=row.answered_at,
             closed_at=row.closed_at,
@@ -3447,6 +3460,25 @@ def get_support_metrics(session: Session) -> SupportMetricsPublic:
     )
     empty_sources_share = (empty_sources_count / answer_count) if answer_count else 0.0
 
+    by_intent_counts: dict[str, list[int]] = {}
+    for item in requests:
+        if item.intent is None:
+            continue
+        counts = by_intent_counts.setdefault(item.intent, [0, 0])
+        counts[0] += 1
+        counts[1] += 1 if item.mode == "operator" else 0
+    by_intent = [
+        IntentMetric(
+            intent=name,
+            label=intent_classifier.label_for(name) or name,
+            total=counts[0],
+            operator_share=_clamp_score(counts[1] / counts[0]),
+        )
+        for name, counts in sorted(
+            by_intent_counts.items(), key=lambda kv: (-kv[1][0], kv[0])
+        )
+    ]
+
     return SupportMetricsPublic(
         total_requests=total,
         faq_share=_clamp_score(faq_count / total),
@@ -3454,6 +3486,7 @@ def get_support_metrics(session: Session) -> SupportMetricsPublic:
         operator_share=_clamp_score(operator_count / total),
         average_confidence=_clamp_score(average_confidence),
         empty_sources_share=_clamp_score(empty_sources_share),
+        by_intent=by_intent,
         feedback_count=feedback_count,
         average_rating=round(average_rating, 2),
     )

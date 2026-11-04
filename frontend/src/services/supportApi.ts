@@ -145,6 +145,8 @@ export type SupportTicket = {
   reason: string
   status: string
   question: string
+  intent?: string | null
+  intent_label?: string | null
   assigned_to?: string | null
   resolution?: string | null
   reopened_from_id?: string | null
@@ -183,6 +185,9 @@ export type JournalRequest = {
   status: string
   confidence: number
   escalated: boolean
+  intent?: string | null
+  intent_label?: string | null
+  intent_confidence?: number | null
   created_at?: string | null
   answered_at?: string | null
   closed_at?: string | null
@@ -195,8 +200,16 @@ export type SupportMetrics = {
   operator_share: number
   average_confidence: number
   empty_sources_share: number
+  by_intent: IntentMetric[]
   feedback_count: number
   average_rating: number
+}
+
+export type IntentMetric = {
+  intent: string
+  label: string
+  total: number
+  operator_share: number
 }
 
 export type ReindexResult = {
@@ -583,6 +596,46 @@ export const getSupportMetrics = () =>
   request<SupportMetrics>("/api/v1/admin/metrics", {
     method: "GET",
     headers: authHeader(),
+  })
+
+/* ----------------------------- классификатор тем ---------------------------- */
+
+export type IntentStatus = {
+  enabled: boolean
+  threshold: number
+  service_url: string
+  reachable: boolean
+  model_loaded: boolean
+  error?: string | null
+  categories: { name: string; label: string }[]
+}
+
+export type IntentCandidate = {
+  category: string
+  label: string
+  confidence: number
+}
+
+export type IntentTestResult = {
+  intent?: string | null
+  intent_label?: string | null
+  confidence: number
+  threshold: number
+  candidates: IntentCandidate[]
+  error?: string | null
+}
+
+export const getIntentStatus = () =>
+  request<IntentStatus>("/api/v1/admin/intent/status", {
+    method: "GET",
+    headers: authHeader(),
+  })
+
+export const testIntent = (question: string) =>
+  request<IntentTestResult>("/api/v1/admin/intent/test", {
+    method: "POST",
+    headers: { ...authHeader(), "Content-Type": "application/json" },
+    body: JSON.stringify({ question }),
   })
 
 /* ---------------------------- внешние RAG-движки --------------------------- */

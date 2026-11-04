@@ -206,6 +206,19 @@ services:
     networks:
       - traefik-public
       - default
+  # Классификатор тем вопросов (модель Кати). Не стартует по умолчанию:
+  # docker compose --profile intent up -d --build intent
+  # Включается в админке: Управление -> Классификатор тем.
+  intent:
+    profiles: ["intent"]
+    build:
+      context: ./intent_service
+    restart: unless-stopped
+    mem_limit: 1g
+    environment:
+      - TORCH_THREADS=2
+    networks:
+      - default
 volumes:
   app-db-data:
   app-logs:

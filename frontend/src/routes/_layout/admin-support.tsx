@@ -5,6 +5,7 @@ import { UsersService } from "@/client"
 import { DocsPanel } from "@/components/SupportAdmin/DocsPanel"
 import { EnginesPanel } from "@/components/SupportAdmin/EnginesPanel"
 import { FaqPanel } from "@/components/SupportAdmin/FaqPanel"
+import { IntentPanel } from "@/components/SupportAdmin/IntentPanel"
 import { KnowledgePanel } from "@/components/SupportAdmin/KnowledgePanel"
 import { MetricsPanel } from "@/components/SupportAdmin/MetricsPanel"
 import { RequestsPanel } from "@/components/SupportAdmin/RequestsPanel"
@@ -98,6 +99,12 @@ const TABS: TabDefinition[] = [
     label: "Частые вопросы",
     permission: PERMISSIONS.KNOWLEDGE_READ,
     render: () => <FaqPanel />,
+  },
+  {
+    value: "intent",
+    label: "Классификатор тем",
+    permission: PERMISSIONS.METRICS_READ,
+    render: () => <IntentPanel />,
   },
   {
     value: "users",
