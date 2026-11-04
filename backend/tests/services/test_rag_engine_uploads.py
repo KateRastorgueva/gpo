@@ -166,7 +166,9 @@ def test_anythingllm_lists_workspace_documents_by_title() -> None:
                         "documents": [
                             {
                                 "filename": "a.json",
-                                "metadata": json.dumps({"title": "a.pdf"}),
+                                "metadata": json.dumps(
+                                    {"title": "a.pdf", "wordCount": 42}
+                                ),
                             },
                             {"filename": "b.json"},
                         ]
@@ -177,6 +179,10 @@ def test_anythingllm_lists_workspace_documents_by_title() -> None:
 
     docs = rag_providers.list_anythingllm_documents(_anything_client(handler))
     assert [d.name for d in docs] == ["a.pdf", "b.json"]
+    assert [(d.state, d.word_count) for d in docs] == [
+        ("В индексе", 42),
+        ("В индексе", None),
+    ]
 
 
 def test_provider_configuration_flags(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -698,7 +698,12 @@ export type EngineDocuments = {
   engine: RagEngine
   configured: boolean
   error?: string | null
-  data: { name: string; state?: string | null; size_bytes?: number | null }[]
+  data: {
+    name: string
+    state?: string | null
+    size_bytes?: number | null
+    word_count?: number | null
+  }[]
   count: number
 }
 

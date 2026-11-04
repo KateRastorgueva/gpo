@@ -448,7 +448,13 @@ function EngineDocumentsCard() {
                         {doc.name}
                       </TableCell>
                       <TableCell>{doc.state || "—"}</TableCell>
-                      <TableCell>{formatSize(doc.size_bytes)}</TableCell>
+                      <TableCell>
+                        {doc.size_bytes != null
+                          ? formatSize(doc.size_bytes)
+                          : doc.word_count != null
+                            ? `${doc.word_count.toLocaleString("ru-RU")} слов`
+                            : "—"}
+                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
