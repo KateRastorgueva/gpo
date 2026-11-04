@@ -1,0 +1,38 @@
+{
+  "_comment": "Сценарии автотеста хоста. expect_mode: faq | rag | operator | any. expect_source — часть названия файла источника (необязательно). Каждый вопрос тратит квоту облачного движка, держите список коротким.",
+  "scenarios": [
+    {
+      "id": "faq-schedule",
+      "question": "Где посмотреть расписание занятий ТУСУР?",
+      "expect_mode": "any"
+    },
+    {
+      "id": "doc-academic-leave",
+      "question": "Как оформляется приостановление образовательных отношений, академический отпуск?",
+      "expect_mode": "rag",
+      "expect_source": "Poryadok_oformleniya"
+    },
+    {
+      "id": "doc-founder",
+      "question": "Кто является учредителем ТУСУР?",
+      "expect_mode": "rag",
+      "expect_source": "Ustav"
+    },
+    {
+      "id": "scan-charter-2020",
+      "question": "Какие изменения внесены в устав ТУСУР в марте 2020 года?",
+      "expect_mode": "any",
+      "expect_source": "Izmeneniya_v_ustav"
+    },
+    {
+      "id": "critical-collective-agreement",
+      "question": "Какие гарантии работникам предусмотрены коллективным договором?",
+      "expect_mode": "operator"
+    },
+    {
+      "id": "off-topic",
+      "question": "Какой рецепт борща самый вкусный?",
+      "expect_mode": "operator"
+    }
+  ]
+}
