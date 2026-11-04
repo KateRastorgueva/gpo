@@ -18,6 +18,8 @@ export type DecisionMetrics = {
 }
 
 export type SupportRouteMode = "faq" | "rag" | "operator"
+// "reject" — вежливый отказ фильтра офтопа: в журнале записи нет, request_id пуст.
+export type SupportAskMode = SupportRouteMode | "reject"
 export type SupportStepKind = SupportRouteMode | "human"
 
 export type SupportStep = {
@@ -34,9 +36,9 @@ export type SupportStep = {
 }
 
 export type SupportAskResponse = {
-  request_id: string
+  request_id: string | null
   session_id: string
-  mode: SupportRouteMode
+  mode: SupportAskMode
   answer: string
   sources: SourceAttribution[]
   confidence: number
@@ -274,6 +276,18 @@ export const askSupport = (payload: {
   channel: "web"
 }) =>
   request<SupportAskResponse>("/api/v1/support/ask", {
+    method: "POST",
+    headers: jsonHeaders(),
+    body: JSON.stringify(payload),
+  })
+
+// Кнопка «Передать оператору» после отказа фильтра офтопа.
+export const escalateSupport = (payload: {
+  question: string
+  session_id: string
+  channel: "web"
+}) =>
+  request<SupportAskResponse>("/api/v1/support/escalate", {
     method: "POST",
     headers: jsonHeaders(),
     body: JSON.stringify(payload),

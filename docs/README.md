@@ -23,6 +23,8 @@
 - [`../CURRENT_VERSION.md`](../CURRENT_VERSION.md) — текущий зафиксированный scope.
 - [`../LINKS.md`](../LINKS.md) — endpoint-ы и рабочие URL.
 
+- [`offtopic-filter.md`](offtopic-filter.md) — фильтр офтопа: вежливый отказ и кнопка «Передать оператору».
+
 ## Agent Start (Codex)
 
 - `../AGENTS.md` - primary policy и рабочие ограничения.
