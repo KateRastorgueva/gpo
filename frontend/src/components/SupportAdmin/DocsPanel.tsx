@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { useState } from "react"
-
+import { useEffect, useState } from "react"
 import { EmptyState, StatusBadge, TagList } from "@/components/Support/display"
+import { JobCard, UploadCard } from "@/components/SupportAdmin/EnginesPanel"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import {
@@ -29,11 +29,35 @@ import { PERMISSIONS } from "@/lib/permissions"
 import {
   createKnowledgeDoc,
   deleteKnowledgeDoc,
+  getIngestJobs,
   getKnowledgeDocs,
   type KnowledgeDoc,
   reindexKnowledgeDocs,
   updateKnowledgeDoc,
 } from "@/services/supportApi"
+
+const safeDecode = (value: string) => {
+  try {
+    return decodeURIComponent(value)
+  } catch {
+    return value
+  }
+}
+
+// Короткий вид ссылки: домен + обрезанный декодированный путь
+const shortUrl = (raw: string, max = 60) => {
+  try {
+    const u = new URL(raw)
+    let path = u.pathname + u.search
+    try {
+      path = decodeURIComponent(path)
+    } catch {}
+    const text = u.host + (path === "/" ? "" : path)
+    return text.length > max ? `${text.slice(0, max - 1)}…` : text
+  } catch {
+    return raw.length > max ? `${raw.slice(0, max - 1)}…` : raw
+  }
+}
 
 const parseTags = (value: string) =>
   value
@@ -61,6 +85,21 @@ export function DocsPanel() {
     queryKey: ["adminDocs"],
     queryFn: getKnowledgeDocs,
   })
+
+  const jobsQuery = useQuery({
+    queryKey: ["ingestJobs"],
+    queryFn: getIngestJobs,
+    refetchInterval: (query) =>
+      query.state.data?.data.some((job) => !job.finished) ? 2500 : false,
+  })
+  const latestJob = jobsQuery.data?.data[0]
+  const latestFinished = latestJob?.finished ? latestJob.id : null
+  // Когда загрузка завершилась, обновляем список документов
+  useEffect(() => {
+    if (latestFinished) {
+      queryClient.invalidateQueries({ queryKey: ["adminDocs"] })
+    }
+  }, [latestFinished, queryClient])
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ["adminDocs"] })
@@ -132,9 +171,21 @@ export function DocsPanel() {
   return (
     <div className="grid gap-6">
       {canWrite ? (
+        <UploadCard
+          title="Загрузить файлы"
+          onStarted={() =>
+            queryClient.invalidateQueries({ queryKey: ["ingestJobs"] })
+          }
+        />
+      ) : null}
+      {canWrite && latestJob && !latestJob.finished ? (
+        <JobCard job={latestJob} />
+      ) : null}
+
+      {canWrite ? (
         <Card>
           <CardHeader>
-            <CardTitle>Новый документ</CardTitle>
+            <CardTitle>Новый документ по ссылке</CardTitle>
           </CardHeader>
           <CardContent className="grid gap-3">
             <p className="text-xs text-muted-foreground">
@@ -189,71 +240,76 @@ export function DocsPanel() {
           ) : docs.length === 0 ? (
             <EmptyState text="Документов нет — добавьте первый." />
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Документ</TableHead>
-                  <TableHead className="w-40">Тэги</TableHead>
-                  <TableHead className="w-32">Статус</TableHead>
-                  <TableHead className="w-56">Действия</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {docs.map((doc) => (
-                  <TableRow key={doc.id}>
-                    <TableCell>
-                      <p className="font-medium">{doc.title}</p>
-                      <a
-                        className="text-xs break-all text-primary underline"
-                        href={doc.url}
-                        target="_blank"
-                        rel="noreferrer"
-                      >
-                        {doc.url}
-                      </a>
-                    </TableCell>
-                    <TableCell>
-                      <TagList tags={doc.tags} />
-                    </TableCell>
-                    <TableCell>
-                      <StatusBadge status={doc.status} />
-                    </TableCell>
-                    <TableCell>
-                      {canWrite ? (
-                        <div className="flex flex-wrap gap-1">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => openEdit(doc)}
-                          >
-                            Изменить
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => reindexMutation.mutate([doc.id])}
-                          >
-                            Reindex
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="destructive"
-                            disabled={deleteMutation.isPending}
-                            onClick={() => deleteMutation.mutate(doc.id)}
-                          >
-                            Удалить
-                          </Button>
-                        </div>
-                      ) : (
-                        <span className="text-xs text-muted-foreground">
-                          только чтение
-                        </span>
-                      )}
-                    </TableCell>
+            <div className="overflow-x-auto">
+              <Table className="table-fixed">
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Документ</TableHead>
+                    <TableHead className="w-40">Тэги</TableHead>
+                    <TableHead className="w-32">Статус</TableHead>
+                    <TableHead className="w-56">Действия</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {docs.map((doc) => (
+                    <TableRow key={doc.id}>
+                      <TableCell className="overflow-hidden">
+                        <p className="truncate font-medium" title={doc.title}>
+                          {doc.title}
+                        </p>
+                        <a
+                          className="block max-w-[420px] truncate text-xs text-primary underline"
+                          title={safeDecode(doc.url)}
+                          href={doc.url}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          {shortUrl(doc.url)}
+                        </a>
+                      </TableCell>
+                      <TableCell>
+                        <TagList tags={doc.tags} />
+                      </TableCell>
+                      <TableCell>
+                        <StatusBadge status={doc.status} />
+                      </TableCell>
+                      <TableCell>
+                        {canWrite ? (
+                          <div className="flex flex-wrap gap-1">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => openEdit(doc)}
+                            >
+                              Изменить
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => reindexMutation.mutate([doc.id])}
+                            >
+                              Reindex
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="destructive"
+                              disabled={deleteMutation.isPending}
+                              onClick={() => deleteMutation.mutate(doc.id)}
+                            >
+                              Удалить
+                            </Button>
+                          </div>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">
+                            только чтение
+                          </span>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
           )}
         </CardContent>
       </Card>
