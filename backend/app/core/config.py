@@ -184,6 +184,10 @@ class Settings(BaseSettings):
     RAG_TOP_SCORE_THRESHOLD_HASHED: float = 0.5
     RAG_RELEVANT_CHUNK_THRESHOLD_HASHED: float = 0.25
     RAG_MIN_RELEVANT_CHUNKS_HASHED: int = 1
+    # Фильтр офтопа (services/offtopic.py): выключен по умолчанию.
+    OFFTOPIC_FILTER_ENABLED: bool = False
+    OFFTOPIC_MIN_MEAN_SIMILARITY: float = 0.30
+    OFFTOPIC_TOP_N: int = 5
     CRITICAL_CONFIDENCE_THRESHOLD: float = 0.80
     LOW_CONFIDENCE_MIN: float = 0.65
     LOW_CONFIDENCE_MAX: float = 0.79
