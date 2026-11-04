@@ -13,12 +13,13 @@ import logging
 import mimetypes
 import tempfile
 import uuid
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from sqlalchemy import text
 from sqlmodel import Session, col, func, select
 
+from app.core import event_log
 from app.core.db import engine
 from app.models import (
     IngestItem,
@@ -118,7 +119,32 @@ def _process_item(session: Session, item: IngestItem, target: str) -> None:
     item.finished_at = get_datetime_utc()
     session.add(item)
     session.commit()
+    event_log.log_event(
+        "ingest.file",
+        job_id=str(item.job_id),
+        filename=item.filename,
+        bytes=len(data),
+        target=target,
+        status=item.status,
+        engines={
+            name: getattr(item, f"{name}_status", None)
+            for name in TARGET_ENGINES[target]
+        },
+        error=item.error,
+        wait_ms=_ms_between(item.created_at, item.finished_at),
+    )
     path.unlink(missing_ok=True)
+
+
+def _ms_between(start: datetime | None, end: datetime | None) -> int | None:
+    """Миллисекунды между отметками; из БД время может прийти без tzinfo."""
+    if start is None or end is None:
+        return None
+    if start.tzinfo is None:
+        start = start.replace(tzinfo=timezone.utc)
+    if end.tzinfo is None:
+        end = end.replace(tzinfo=timezone.utc)
+    return max(0, int((end - start).total_seconds() * 1000))
 
 
 def _claim_next(session: Session) -> tuple[IngestItem, str] | None:

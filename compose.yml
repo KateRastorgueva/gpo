@@ -128,6 +128,9 @@ services:
       - GOOGLE_MODEL=${GOOGLE_MODEL}
       - OLLAMA_BASE_URL=${OLLAMA_BASE_URL}
       - OLLAMA_MODEL=${OLLAMA_MODEL}
+    volumes:
+      # Журнал событий хоста (JSON Lines), переживает пересборку контейнера.
+      - app-logs:/app/logs
 
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/utils/health-check/"]
@@ -205,6 +208,7 @@ services:
       - default
 volumes:
   app-db-data:
+  app-logs:
   qdrant-data:
 
 networks:

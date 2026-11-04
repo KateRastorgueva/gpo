@@ -1,6 +1,7 @@
 from fastapi import APIRouter
 
 from app.api.routes import (
+    admin_logs,
     admin_rag,
     admin_support,
     items,
@@ -20,6 +21,7 @@ api_router.include_router(items.router)
 api_router.include_router(support.router)
 api_router.include_router(admin_support.router)
 api_router.include_router(admin_rag.router)
+api_router.include_router(admin_logs.router)
 
 
 if settings.ENVIRONMENT == "local":
