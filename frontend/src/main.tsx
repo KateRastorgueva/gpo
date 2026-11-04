@@ -43,10 +43,24 @@ OpenAPI.TOKEN = async () => {
   return localStorage.getItem("access_token") || ""
 }
 
+// Страницы без входа: редирект на них из обработчика 401/403 вызвал бы
+// перезагрузку и бесконечный цикл.
+const PUBLIC_PATHS = [
+  "/login",
+  "/signup",
+  "/reset-password",
+  "/recover-password",
+]
+
+export const isPublicPath = (pathname: string): boolean =>
+  PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`))
+
 const handleApiError = (error: Error) => {
   if (error instanceof ApiError && [401, 403].includes(error.status)) {
     localStorage.removeItem("access_token")
-    window.location.href = "/login"
+    if (!isPublicPath(window.location.pathname)) {
+      window.location.href = "/login"
+    }
   }
 }
 const queryClient = new QueryClient({

@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query"
 
 import { OpenAPI } from "@/client"
 import { request as __request } from "@/client/core/request"
+import { isLoggedIn } from "@/hooks/useAuth"
 
 type VersionInfo = {
   git_sha_short: string
@@ -31,6 +32,8 @@ export function BuildVersion({ className }: { className?: string }) {
       }),
     staleTime: 60_000,
     retry: false,
+    // Эндпоинт закрыт авторизацией: без входа не запрашиваем (иначе 401 на /login)
+    enabled: isLoggedIn(),
   })
 
   if (!data) return null
