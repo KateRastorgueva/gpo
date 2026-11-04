@@ -23,11 +23,12 @@ from app.models import (
     IngestJobCreate,
     IngestJobPublic,
     IngestJobsPublic,
+    KnowledgeChunk,
     RagProviderOption,
     RagProviderPublic,
     RagProviderUpdate,
 )
-from app.services import rag_ingest, rag_providers
+from app.services import dense_local, rag_ingest, rag_providers
 
 router = APIRouter(prefix="/admin/rag", tags=["admin-rag"])
 
@@ -69,6 +70,25 @@ def set_rag_provider(session: SessionDep, body: RagProviderUpdate) -> Any:
         )
     rag_providers.set_active_provider(session, body.provider)
     return _provider_public(session)
+
+
+@router.get(
+    "/dense-status",
+    dependencies=[Depends(require_permission(KNOWLEDGE_READ))],
+)
+def get_dense_status(session: SessionDep) -> Any:
+    """Состояние лёгкой векторной добавки: есть ли модель, сколько векторов в кэше."""
+
+    from app.services.app_config import live_settings
+
+    chunks = session.exec(select(func.count()).select_from(KnowledgeChunk)).one()
+    if live_settings.DENSE_SEARCH_ENABLED:
+        dense_local.get_cache()  # загружает модель, чтобы показать число векторов
+    return {
+        "enabled": bool(live_settings.DENSE_SEARCH_ENABLED),
+        "chunks": chunks,
+        **dense_local.status(),
+    }
 
 
 @router.get(

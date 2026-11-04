@@ -7,6 +7,7 @@
 """
 
 import hashlib
+import logging
 import math
 import re
 import time
@@ -73,8 +74,10 @@ from app.models import (
     TagPublic,
     User,
 )
-from app.services import rag_providers
+from app.services import dense_local, offtopic, rag_providers
 from app.services.app_config import live_settings
+
+logger = logging.getLogger(__name__)
 
 CRITICAL_KEYWORDS = (
     "срок",
@@ -1279,6 +1282,7 @@ def retrieve_lexical_bm25(
     owner_types: list[str] | None = None,
     category_ids: list[uuid.UUID] | None = None,
     tag_ids: list[uuid.UUID] | None = None,
+    rows: list[tuple[KnowledgeChunk, uuid.UUID, str, str | None]] | None = None,
 ) -> tuple[list[RetrievalResult], dict[uuid.UUID, float]]:
     """BM25 по всем активным чанкам.
 
@@ -1287,9 +1291,10 @@ def retrieve_lexical_bm25(
     в корпусе, считаются максимально информативными и снижают покрытие.
     """
 
-    rows = _lexical_rows(
-        session, owner_types=owner_types, category_ids=category_ids, tag_ids=tag_ids
-    )
+    if rows is None:
+        rows = _lexical_rows(
+            session, owner_types=owner_types, category_ids=category_ids, tag_ids=tag_ids
+        )
     query_terms = set(_bm25_tokens(question))
     if not rows or not query_terms:
         return [], {}
@@ -1350,10 +1355,67 @@ def retrieve_lexical_bm25(
     return results, coverage
 
 
+def dense_search_active() -> bool:
+    """Включена ли лёгкая векторная добавка (numpy-модель без Qdrant)."""
+
+    return (
+        not vector_search_enabled()
+        and bool(live_settings.DENSE_SEARCH_ENABLED)
+        and dense_local.model_available()
+    )
+
+
+def retrieve_dense_local(
+    rows: list[tuple[KnowledgeChunk, uuid.UUID, str, str | None]],
+    question: str,
+    diagnostics: dict[str, Any] | None = None,
+) -> tuple[list[RetrievalResult], dict[uuid.UUID, float]]:
+    """Векторный поиск локальной моделью по тем же строкам, что и BM25.
+
+    Возвращает кандидатов по убыванию косинуса и откалиброванную оценку 0..1
+    (см. DENSE_SCORE_FLOOR/CEIL) для маршрутизации. Пока кэш векторов не
+    заполнен, чанки без вектора просто не участвуют (их досчитывает фон).
+    """
+
+    items = []
+    for chunk, _owner_id, title, _ref in rows:
+        text = dense_local.document_text(title, chunk.content)
+        items.append((dense_local.text_key(text), text))
+    try:
+        ranked, _missing = dense_local.search(question, items)
+    except Exception:
+        logger.exception("dense search failed, BM25 only")
+        return [], {}
+    if diagnostics is not None:
+        # Сырые косинусы лучших документов — для фильтра офтопа.
+        diagnostics["dense_cosines"] = [
+            cosine for _pos, cosine in ranked[: max(1, live_settings.OFFTOPIC_TOP_N)]
+        ]
+    limit = settings.HYBRID_CANDIDATES_LIMIT
+    scores: dict[uuid.UUID, float] = {}
+    results: list[RetrievalResult] = []
+    for pos, cosine in ranked[:limit]:
+        chunk, owner_id, owner_title, owner_ref = rows[pos]
+        score = dense_local.calibrated_score(cosine)
+        scores[chunk.id] = score
+        results.append(
+            RetrievalResult(
+                source_id=owner_id,
+                source_title=owner_title,
+                source_ref=owner_ref,
+                chunk_id=chunk.id,
+                snippet=chunk.content,
+                score=_clamp_score(score),
+            )
+        )
+    return results, scores
+
+
 def _rrf_merge(
     semantic_results: list[RetrievalResult],
     lexical_results: list[RetrievalResult],
     coverage: dict[uuid.UUID, float],
+    dense_scores: dict[uuid.UUID, float] | None = None,
 ) -> list[RetrievalResult]:
     """Объединяет списки по рангам (RRF), не смешивая несопоставимые шкалы оценок.
 
@@ -1376,11 +1438,15 @@ def _rrf_merge(
     merged: list[RetrievalResult] = []
     for key in sorted(rrf, key=lambda k: rrf[k], reverse=True):
         base = items[key]
-        score = (
-            coverage.get(base.chunk_id, 0.0)
-            if hashed and base.chunk_id
-            else blended.get(key, base.score)
-        )
+        if hashed and base.chunk_id:
+            # С векторной добавкой фрагмент, найденный по смыслу (синоним, другая
+            # форма слова), получает оценку по косинусу, даже если слов вопроса в
+            # нём мало: берётся большая из двух оценок.
+            score = coverage.get(base.chunk_id, 0.0)
+            if dense_scores:
+                score = max(score, dense_scores.get(base.chunk_id, 0.0))
+        else:
+            score = blended.get(key, base.score)
         merged.append(
             RetrievalResult(
                 source_id=base.source_id,
@@ -1415,7 +1481,15 @@ def retrieve_relevant_chunks(
     owner_types: list[str] | None = None,
     category_ids: list[uuid.UUID] | None = None,
     tag_ids: list[uuid.UUID] | None = None,
+    diagnostics: dict[str, Any] | None = None,
 ) -> list[RetrievalResult]:
+    if dense_search_active():
+        rows = _lexical_rows(
+            session, owner_types=owner_types, category_ids=category_ids, tag_ids=tag_ids
+        )
+        dense, dense_scores = retrieve_dense_local(rows, question, diagnostics)
+        lexical, coverage = retrieve_lexical_bm25(session, question, rows=rows)
+        return _rrf_merge(dense, lexical, coverage, dense_scores)
     semantic = retrieve_semantic_chunks(
         question,
         owner_types=owner_types,
@@ -1963,6 +2037,73 @@ def _run_external_rag(
     )
 
 
+def _reject_response(
+    *,
+    payload: SupportAskRequest,
+    session_id: str,
+    reason: str,
+    faq_score: float,
+    critical: bool,
+    started: float,
+    mean_similarity: float | None = None,
+) -> SupportAskResponse:
+    """Вежливый отказ на офтоп: в базу ничего не пишется, очередь оператора не растёт."""
+
+    event_log.log_event(
+        "support.reject",
+        session_id=session_id,
+        reason=reason,
+        mean_similarity=round(mean_similarity, 4)
+        if mean_similarity is not None
+        else None,
+        threshold=float(live_settings.OFFTOPIC_MIN_MEAN_SIMILARITY),
+        question=payload.question if settings.EVENT_LOG_QUESTIONS else None,
+        question_len=len(payload.question),
+        response_time_ms=_elapsed_ms(started),
+    )
+    return SupportAskResponse(
+        request_id=None,
+        session_id=session_id,
+        mode="reject",
+        answer=offtopic.REFUSAL_TEXT,
+        sources=[],
+        confidence=0.0,
+        escalated=False,
+        fallback_used=False,
+        route_reason=reason,
+        decision_metrics=DecisionMetrics(
+            top_score=0.0,
+            relevant_chunks=0,
+            faq_score=_clamp_score(faq_score),
+            conflict=False,
+            critical=critical,
+        ),
+    )
+
+
+def escalate_to_operator(
+    *, session: Session, user_id: uuid.UUID | None, payload: SupportAskRequest
+) -> SupportAskResponse:
+    """Пользователь сам передаёт вопрос оператору (кнопка после отказа)."""
+
+    return _record_support_result(
+        session=session,
+        user_id=user_id,
+        payload=payload,
+        session_id=payload.session_id or str(uuid.uuid4()),
+        mode="operator",
+        confidence=0.0,
+        fallback_used=False,
+        escalated=True,
+        answer_text="Вопрос передан оператору, ответ появится здесь.",
+        sources=[],
+        escalation_reason="user-requested",
+        route_reason="user_requested_operator",
+        decision_metrics=DecisionMetrics(),
+        response_time_ms=0,
+    )
+
+
 def run_support_pipeline(
     *, session: Session, user_id: uuid.UUID | None, payload: SupportAskRequest
 ) -> SupportAskResponse:
@@ -2006,6 +2147,20 @@ def run_support_pipeline(
             response_time_ms=_elapsed_ms(started),
         )
 
+    # Фильтр офтопа, шаг 1: правила «мусора» не зависят от движка и модели.
+    filter_on = bool(live_settings.OFFTOPIC_FILTER_ENABLED)
+    if filter_on:
+        junk_reason = offtopic.junk_rule(payload.question)
+        if junk_reason is not None:
+            return _reject_response(
+                payload=payload,
+                session_id=session_id,
+                reason=junk_reason,
+                faq_score=faq_score,
+                critical=critical,
+                started=started,
+            )
+
     # Движок переключается админом на лету, поэтому читается на каждый запрос.
     provider = rag_providers.get_active_provider(session)
     if rag_providers.is_external_provider_enabled(provider):
@@ -2020,8 +2175,11 @@ def run_support_pipeline(
             provider=provider,
         )
 
+    diagnostics: dict[str, Any] = {}
     try:
-        retrieved = retrieve_relevant_chunks(session=session, question=payload.question)
+        retrieved = retrieve_relevant_chunks(
+            session=session, question=payload.question, diagnostics=diagnostics
+        )
     except Exception as exc:
         event_log.log_event(
             "rag.retrieval_error",
@@ -2052,6 +2210,25 @@ def run_support_pipeline(
             response_time_ms=_elapsed_ms(started),
             provider=provider,
         )
+
+    # Фильтр офтопа, шаг 2: среднее сходство top-N. Косинусы есть только у
+    # векторной добавки; без неё решает прежняя маршрутизация.
+    if filter_on and diagnostics.get("dense_cosines"):
+        is_offtopic, mean_similarity = offtopic.is_offtopic_by_similarity(
+            diagnostics["dense_cosines"],
+            float(live_settings.OFFTOPIC_MIN_MEAN_SIMILARITY),
+            int(live_settings.OFFTOPIC_TOP_N),
+        )
+        if is_offtopic:
+            return _reject_response(
+                payload=payload,
+                session_id=session_id,
+                reason=offtopic.REASON_LOW_SIMILARITY,
+                faq_score=faq_score,
+                critical=critical,
+                started=started,
+                mean_similarity=mean_similarity,
+            )
 
     top_threshold, chunk_threshold, min_relevant = routing_thresholds()
     top_score = retrieved[0].score if retrieved else 0.0

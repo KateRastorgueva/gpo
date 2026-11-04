@@ -139,6 +139,23 @@ class Settings(BaseSettings):
     # добавляет, поэтому по умолчанию он выключен (docs/laptop-search-only.md).
     VECTOR_SEARCH_ENABLED: bool = False
 
+    # Векторная добавка к BM25 без Qdrant и без torch (docs/laptop-dense-search.md):
+    # маленькая русская модель (rubert-mini-frida, ~125 МБ) считается в numpy,
+    # векторы чанков кэшируются на диске, списки BM25 и векторов склеиваются RRF.
+    # Включается, только если задан каталог модели и включён флаг.
+    DENSE_SEARCH_ENABLED: bool = False
+    LOCAL_EMBEDDING_MODEL_DIR: str = "/models/rubert-mini-frida"
+    DENSE_CACHE_DIR: str = "/app/dense-cache"
+    DENSE_MAX_TOKENS: int = 256
+    DENSE_QUERY_PREFIX: str = "search_query: "
+    DENSE_DOCUMENT_PREFIX: str = "search_document: "
+    # Косинус ниже FLOOR даёт оценку 0, выше CEIL — 1 (линейно между ними).
+    # Оценка сравнивается с RAG_TOP_SCORE_THRESHOLD_HASHED так же, как покрытие BM25.
+    DENSE_SCORE_FLOOR: float = 0.45
+    DENSE_SCORE_CEIL: float = 0.75
+    # Сколько недостающих чанков досчитать прямо в запросе; больше — в фоне.
+    DENSE_SYNC_EMBED_LIMIT: int = 64
+
     QDRANT_HOST: str = "qdrant"
     QDRANT_PORT: int = 6333
     QDRANT_API_KEY: str | None = None
@@ -167,6 +184,10 @@ class Settings(BaseSettings):
     RAG_TOP_SCORE_THRESHOLD_HASHED: float = 0.5
     RAG_RELEVANT_CHUNK_THRESHOLD_HASHED: float = 0.25
     RAG_MIN_RELEVANT_CHUNKS_HASHED: int = 1
+    # Фильтр офтопа (services/offtopic.py): выключен по умолчанию.
+    OFFTOPIC_FILTER_ENABLED: bool = False
+    OFFTOPIC_MIN_MEAN_SIMILARITY: float = 0.30
+    OFFTOPIC_TOP_N: int = 5
     CRITICAL_CONFIDENCE_THRESHOLD: float = 0.80
     LOW_CONFIDENCE_MIN: float = 0.65
     LOW_CONFIDENCE_MAX: float = 0.79

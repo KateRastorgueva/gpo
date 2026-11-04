@@ -156,3 +156,16 @@ def test_best_fragment_picks_sentence_with_question_words() -> None:
     assert "Гостевой пропуск" in fragment
     assert "Заселение" not in fragment
     assert len(fragment) <= 125
+
+
+def test_dense_status_reports_disabled_by_default(
+    client: TestClient, superuser_token_headers: dict[str, str]
+) -> None:
+    response = client.get(
+        f"{API}/admin/rag/dense-status",
+        headers=superuser_token_headers,
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["enabled"] is False
+    assert {"chunks", "model_available", "cached_vectors", "fill"} <= set(body)

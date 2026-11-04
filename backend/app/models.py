@@ -754,9 +754,10 @@ class SupportTicket(SQLModel, table=True):
 
 
 class SupportAskResponse(SQLModel):
-    request_id: uuid.UUID
+    # None у отказа (mode="reject"): запись в журнале не создаётся.
+    request_id: uuid.UUID | None
     session_id: str
-    mode: Literal["faq", "rag", "operator"]
+    mode: Literal["faq", "rag", "operator", "reject"]
     answer: str
     sources: list[SourceAttribution] = Field(default_factory=list)
     confidence: float = Field(ge=0.0, le=1.0)

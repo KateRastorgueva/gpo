@@ -136,6 +136,10 @@ services:
     volumes:
       # Журнал событий хоста (JSON Lines), переживает пересборку контейнера.
       - app-logs:/app/logs
+      # Лёгкая векторная добавка (docs/laptop-dense-search.md): файлы модели
+      # лежат в _local/models/rubert-mini-frida (не в git), кэш векторов — в томе.
+      - ./_local/models:/models:ro
+      - app-dense:/app/dense-cache
 
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/utils/health-check/"]
@@ -214,6 +218,7 @@ services:
 volumes:
   app-db-data:
   app-logs:
+  app-dense:
   qdrant-data:
 
 networks:
