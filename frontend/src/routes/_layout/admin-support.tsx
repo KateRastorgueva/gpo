@@ -2,6 +2,7 @@ import { createFileRoute, redirect } from "@tanstack/react-router"
 import { useState } from "react"
 
 import { UsersService } from "@/client"
+import { BuildVersion } from "@/components/Common/BuildVersion"
 import { DocsPanel } from "@/components/SupportAdmin/DocsPanel"
 import { EnginesPanel } from "@/components/SupportAdmin/EnginesPanel"
 import { FaqPanel } from "@/components/SupportAdmin/FaqPanel"
@@ -145,6 +146,7 @@ function AdminSupportPage() {
           Роль: {roleName ?? "не задана"} — разделы и действия показаны по вашим
           правам.
         </p>
+        <BuildVersion className="mt-1" />
       </div>
 
       <Tabs

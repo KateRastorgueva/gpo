@@ -67,6 +67,10 @@ services:
     build:
       context: .
       dockerfile: backend/Dockerfile
+      args:
+        - GIT_SHA=${GIT_SHA:-unknown}
+        - GIT_BRANCH=${GIT_BRANCH:-unknown}
+        - BUILD_TIME=${BUILD_TIME:-unknown}
     # command: sleep infinity  # Infinite loop to keep container alive doing nothing
     command:
       - fastapi
