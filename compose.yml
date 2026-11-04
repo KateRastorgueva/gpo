@@ -19,7 +19,11 @@ services:
       - POSTGRES_USER=${POSTGRES_USER?Variable not set}
       - POSTGRES_DB=${POSTGRES_DB?Variable not set}
 
+  # Векторный слой встроенного поиска. По умолчанию не запускается: поиск идёт
+  # BM25 по Postgres (VECTOR_SEARCH_ENABLED=false). Включить:
+  #   docker compose --profile qdrant up -d  и  VECTOR_SEARCH_ENABLED=true
   qdrant:
+    profiles: ["qdrant"]
     image: qdrant/qdrant:v1.14.1
     restart: always
     volumes:
@@ -100,6 +104,7 @@ services:
         restart: true
       qdrant:
         condition: service_started
+        required: false
       prestart:
         condition: service_completed_successfully
     env_file:
@@ -131,6 +136,10 @@ services:
     volumes:
       # Журнал событий хоста (JSON Lines), переживает пересборку контейнера.
       - app-logs:/app/logs
+      # Лёгкая векторная добавка (docs/laptop-dense-search.md): файлы модели
+      # лежат в _local/models/rubert-mini-frida (не в git), кэш векторов — в томе.
+      - ./_local/models:/models:ro
+      - app-dense:/app/dense-cache
 
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/utils/health-check/"]
@@ -222,6 +231,7 @@ services:
 volumes:
   app-db-data:
   app-logs:
+  app-dense:
   qdrant-data:
 
 networks:

@@ -14,6 +14,7 @@ from app.models import (
 from app.services.support_service import (
     SupportConflictError,
     create_feedback,
+    escalate_to_operator,
     list_my_queue,
     list_support_history,
     run_support_pipeline,
@@ -27,6 +28,16 @@ def ask_support_question(
     *, session: SessionDep, current_user: CurrentUser, payload: SupportAskRequest
 ) -> Any:
     return run_support_pipeline(
+        session=session, user_id=current_user.id, payload=payload
+    )
+
+
+@router.post("/escalate", response_model=SupportAskResponse)
+def escalate_support_question(
+    *, session: SessionDep, current_user: CurrentUser, payload: SupportAskRequest
+) -> Any:
+    """Передать вопрос оператору в обход автоответа (после вежливого отказа)."""
+    return escalate_to_operator(
         session=session, user_id=current_user.id, payload=payload
     )
 

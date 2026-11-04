@@ -79,6 +79,7 @@ def test_hashed_backend_vectors_have_configured_dim(monkeypatch: pytest.MonkeyPa
 
 
 def test_routing_thresholds_depend_on_backend(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(service, "vector_search_enabled", lambda: True)
     monkeypatch.setattr(settings, "EMBEDDING_BACKEND", "hashed")
     assert service.routing_thresholds() == (
         settings.RAG_TOP_SCORE_THRESHOLD_HASHED,
@@ -93,7 +94,10 @@ def test_routing_thresholds_depend_on_backend(monkeypatch: pytest.MonkeyPatch) -
     )
 
 
-def test_ensure_collection_rejects_vector_size_mismatch() -> None:
+def test_ensure_collection_rejects_vector_size_mismatch(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(service, "vector_search_enabled", lambda: True)
     response = MagicMock(status_code=200)
     response.json.return_value = {"result": {"config": {"params": {"vectors": {"size": 768}}}}}
     with patch.object(service, "_qdrant_request", return_value=response):

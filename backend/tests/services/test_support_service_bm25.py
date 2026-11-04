@@ -81,6 +81,7 @@ def test_rrf_merge_orders_by_rank_not_raw_score(monkeypatch: pytest.MonkeyPatch)
 def test_rrf_merge_keeps_blended_score_for_real_embeddings(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.setattr(service, "vector_search_enabled", lambda: True)
     monkeypatch.setattr(service, "get_embedding_backend", lambda: "sentence-transformers")
     item = _result(uuid.uuid4(), score=0.8)
     merged = service._rrf_merge([item], [], {})

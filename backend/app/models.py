@@ -758,9 +758,10 @@ class SupportTicket(SQLModel, table=True):
 
 
 class SupportAskResponse(SQLModel):
-    request_id: uuid.UUID
+    # None у отказа (mode="reject"): запись в журнале не создаётся.
+    request_id: uuid.UUID | None
     session_id: str
-    mode: Literal["faq", "rag", "operator"]
+    mode: Literal["faq", "rag", "operator", "reject"]
     answer: str
     sources: list[SourceAttribution] = Field(default_factory=list)
     confidence: float = Field(ge=0.0, le=1.0)
@@ -976,8 +977,8 @@ class MyQueuePublic(SQLModel):
 
 # --------------------------- внешние RAG-движки ---------------------------
 
-RagProviderName = Literal["legacy", "gemini_file_search", "anythingllm"]
-IngestTarget = Literal["gemini", "anythingllm", "both"]
+RagProviderName = Literal["legacy", "search_only", "gemini_file_search", "anythingllm"]
+IngestTarget = Literal["gemini", "anythingllm", "both", "local"]
 
 
 class AppSetting(SQLModel, table=True):
@@ -1070,6 +1071,8 @@ class IngestItemPublic(SQLModel):
     status: str
     gemini_status: str | None = None
     anythingllm_status: str | None = None
+    # Встроенная база знаний (Postgres): своей колонки нет, выводится из status.
+    local_status: str | None = None
     error: str | None = None
     started_at: datetime | None = None
     finished_at: datetime | None = None
