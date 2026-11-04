@@ -84,3 +84,54 @@ def test_source_id_is_stable_per_title() -> None:
 def test_no_answer_marker_with_latin_letters_is_detected() -> None:
     result = rag_providers.parse_gemini_response(_gemini_body("НЕТ_OTBETА", 0))
     assert not result.grounded
+
+
+def _anything(answer: str, text: str, title: str = "721.pdf") -> dict:  # type: ignore[type-arg]
+    return {
+        "textResponse": answer,
+        "sources": [{"title": title, "text": text, "score": 0.7}],
+    }
+
+
+def test_document_metadata_is_stripped_from_snippets() -> None:
+    text = (
+        "<document_metadata>\nsourceDocument: 721.pdf\npublished: 2026\n"
+        "</document_metadata>\n\nСтипендия 1200 рублей."
+    )
+    result = rag_providers.parse_anythingllm_response(
+        _anything("Стипендия 1200 рублей.", text)
+    )
+    assert result.sources[0].snippet == "Стипендия 1200 рублей."
+    assert "document_metadata" not in (result.sources[0].text or "")
+
+
+def test_unknown_document_in_answer_is_marked_and_confidence_lowered() -> None:
+    result = rag_providers.parse_anythingllm_response(
+        _anything(
+            "Из документа Pravila_02.11.2017_(1) (1).pdf: выплата положена.",
+            "Выплата положена.",
+        )
+    )
+    assert "(источник не подтверждён)" in result.answer
+    assert "Pravila_02.11.2017_(1) (1).pdf" in result.answer
+    assert result.confidence == 0.35
+
+
+def test_known_document_and_numbers_in_chunks_are_not_flagged() -> None:
+    result = rag_providers.parse_anythingllm_response(
+        _anything(
+            "Согласно 721.pdf, стипендия 1 200 рублей.",
+            "Размер стипендии составляет 1200 рублей.",
+        )
+    )
+    assert "не подтверждён" not in result.answer
+    assert "⚠" not in result.answer
+    assert result.confidence == 0.7
+
+
+def test_number_missing_in_chunks_is_marked_unverified() -> None:
+    result = rag_providers.parse_anythingllm_response(
+        _anything("Стипендия 1200 рублей.", "Стипендия назначается по итогам сессии.")
+    )
+    assert "1200" in result.answer.split("⚠")[1]
+    assert result.confidence == 0.49

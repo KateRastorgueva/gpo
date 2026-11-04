@@ -232,7 +232,8 @@ class KnowledgeCategory(SQLModel, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     name: str = Field(unique=True, index=True, max_length=120)
     created_at: datetime | None = Field(
-        default_factory=get_datetime_utc, sa_type=DateTime(timezone=True)  # type: ignore
+        default_factory=get_datetime_utc,
+        sa_type=DateTime(timezone=True),  # type: ignore
     )
     sources: list["KnowledgeSource"] = Relationship(back_populates="category")
 
@@ -243,7 +244,8 @@ class Tag(SQLModel, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     name: str = Field(unique=True, index=True, max_length=80)
     created_at: datetime | None = Field(
-        default_factory=get_datetime_utc, sa_type=DateTime(timezone=True)  # type: ignore
+        default_factory=get_datetime_utc,
+        sa_type=DateTime(timezone=True),  # type: ignore
     )
 
 
@@ -359,13 +361,16 @@ class KnowledgeSource(KnowledgeSourceBase, table=True):
         ondelete="SET NULL",
     )
     last_indexed_at: datetime | None = Field(
-        default=None, sa_type=DateTime(timezone=True)  # type: ignore
+        default=None,
+        sa_type=DateTime(timezone=True),  # type: ignore
     )
     created_at: datetime | None = Field(
-        default_factory=get_datetime_utc, sa_type=DateTime(timezone=True)  # type: ignore
+        default_factory=get_datetime_utc,
+        sa_type=DateTime(timezone=True),  # type: ignore
     )
     updated_at: datetime | None = Field(
-        default_factory=get_datetime_utc, sa_type=DateTime(timezone=True)  # type: ignore
+        default_factory=get_datetime_utc,
+        sa_type=DateTime(timezone=True),  # type: ignore
     )
     category: KnowledgeCategory | None = Relationship(back_populates="sources")
     chunks: list["KnowledgeChunk"] = Relationship(
@@ -433,13 +438,16 @@ class KnowledgeDoc(SQLModel, table=True):
     url: str = Field(min_length=1, max_length=1024)
     status: str = Field(default="pending", min_length=1, max_length=20)
     last_indexed_at: datetime | None = Field(
-        default=None, sa_type=DateTime(timezone=True)  # type: ignore
+        default=None,
+        sa_type=DateTime(timezone=True),  # type: ignore
     )
     created_at: datetime | None = Field(
-        default_factory=get_datetime_utc, sa_type=DateTime(timezone=True)  # type: ignore
+        default_factory=get_datetime_utc,
+        sa_type=DateTime(timezone=True),  # type: ignore
     )
     updated_at: datetime | None = Field(
-        default_factory=get_datetime_utc, sa_type=DateTime(timezone=True)  # type: ignore
+        default_factory=get_datetime_utc,
+        sa_type=DateTime(timezone=True),  # type: ignore
     )
     chunks: list["KnowledgeChunk"] = Relationship(
         back_populates="doc", cascade_delete=True
@@ -543,7 +551,8 @@ class KnowledgeChunk(SQLModel, table=True):
     content: str = Field(min_length=1)
     vector_id: str = Field(index=True, max_length=64, unique=True)
     created_at: datetime | None = Field(
-        default_factory=get_datetime_utc, sa_type=DateTime(timezone=True)  # type: ignore
+        default_factory=get_datetime_utc,
+        sa_type=DateTime(timezone=True),  # type: ignore
     )
     source: KnowledgeSource | None = Relationship(back_populates="chunks")
     doc: KnowledgeDoc | None = Relationship(back_populates="chunks")
@@ -610,10 +619,12 @@ class SupportRequest(SQLModel, table=True):
         sa_type=DateTime(timezone=True),  # type: ignore
     )
     answered_at: datetime | None = Field(
-        default=None, sa_type=DateTime(timezone=True)  # type: ignore
+        default=None,
+        sa_type=DateTime(timezone=True),  # type: ignore
     )
     closed_at: datetime | None = Field(
-        default=None, sa_type=DateTime(timezone=True)  # type: ignore
+        default=None,
+        sa_type=DateTime(timezone=True),  # type: ignore
     )
     answer: "SupportAnswer" = Relationship(
         back_populates="request", cascade_delete=True
@@ -700,13 +711,15 @@ class SupportAnswer(SQLModel, table=True):
     )
     answer: str = Field(min_length=1, max_length=8000)
     sources_json: list[dict[str, Any]] = Field(
-        default_factory=list, sa_type=JSON  # type: ignore
+        default_factory=list,
+        sa_type=JSON,  # type: ignore
     )
     # "Завершено на данном шаге": False у автоматической эскалации, ждущей оператора.
     is_final: bool = True
     response_time_ms: int | None = Field(default=None, ge=0)
     created_at: datetime | None = Field(
-        default_factory=get_datetime_utc, sa_type=DateTime(timezone=True)  # type: ignore
+        default_factory=get_datetime_utc,
+        sa_type=DateTime(timezone=True),  # type: ignore
     )
     request: "SupportRequest" = Relationship(back_populates="answer")
 
@@ -746,13 +759,16 @@ class SupportTicket(SQLModel, table=True):
         default=None, foreign_key="support_ticket.id", nullable=True
     )
     resolved_at: datetime | None = Field(
-        default=None, sa_type=DateTime(timezone=True)  # type: ignore
+        default=None,
+        sa_type=DateTime(timezone=True),  # type: ignore
     )
     created_at: datetime | None = Field(
-        default_factory=get_datetime_utc, sa_type=DateTime(timezone=True)  # type: ignore
+        default_factory=get_datetime_utc,
+        sa_type=DateTime(timezone=True),  # type: ignore
     )
     updated_at: datetime | None = Field(
-        default_factory=get_datetime_utc, sa_type=DateTime(timezone=True)  # type: ignore
+        default_factory=get_datetime_utc,
+        sa_type=DateTime(timezone=True),  # type: ignore
     )
     request: "SupportRequest" = Relationship(back_populates="queue_item")
 
@@ -1036,10 +1052,12 @@ class IngestItem(SQLModel, table=True):
         sa_type=DateTime(timezone=True),  # type: ignore
     )
     started_at: datetime | None = Field(
-        default=None, sa_type=DateTime(timezone=True)  # type: ignore
+        default=None,
+        sa_type=DateTime(timezone=True),  # type: ignore
     )
     finished_at: datetime | None = Field(
-        default=None, sa_type=DateTime(timezone=True)  # type: ignore
+        default=None,
+        sa_type=DateTime(timezone=True),  # type: ignore
     )
 
 
@@ -1100,6 +1118,7 @@ class EngineDocument(SQLModel):
     name: str
     state: str | None = None
     size_bytes: int | None = None
+    word_count: int | None = None
 
 
 class EngineDocumentsPublic(SQLModel):

@@ -14,6 +14,7 @@
 """
 
 import json
+import re
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -60,6 +61,8 @@ class ProviderSource:
     ref: str | None = None
     page: int | None = None
     score: float | None = None
+    # Полный текст фрагмента (для проверки ответа); в историю не пишется.
+    text: str | None = None
 
     @property
     def source_id(self) -> uuid.UUID:
@@ -131,6 +134,88 @@ def _is_no_answer(text: str) -> bool:
     return not text.strip() or NO_ANSWER_MARKER in text.upper().translate(_HOMOGLYPHS)
 
 
+# --------------------------- проверка источников ответа ---------------------------
+
+_METADATA_RE = re.compile(
+    r"<document_metadata>.*?</document_metadata>\s*", re.DOTALL | re.IGNORECASE
+)
+# Название файла в тексте ответа: «..., из документа Pravila_02.11.2017_(1) (1).pdf».
+_DOC_NAME_RE = re.compile(
+    r"[\w.()\-]+(?: [\w.()\-]+){0,6}?\.(?:pdf|docx?|rtf|txt)\b", re.IGNORECASE
+)
+_NUMBER_RE = re.compile(r"(?<![\w.])\d[\d  ]*(?:[.,]\d+)?")
+UNVERIFIED_DOC_PENALTY = 0.5
+UNVERIFIED_NUMBERS_PENALTY = 0.7
+
+
+def strip_document_metadata(text: str | None) -> str:
+    """Убирает служебный блок ``<document_metadata>`` AnythingLLM из фрагмента."""
+
+    return _METADATA_RE.sub("", text or "").strip()
+
+
+def _norm_name(name: str) -> str:
+    return re.sub(r"\s+", " ", name).strip().lower()
+
+
+def _digits(value: str) -> str:
+    return re.sub(r"\D", "", value)
+
+
+def verify_answer_sources(result: ProviderAnswer) -> ProviderAnswer:
+    """Сверяет ответ модели с найденными фрагментами.
+
+    * документ, названный в ответе, но отсутствующий среди источников, помечается
+      как неподтверждённый, уверенность снижается;
+    * числа (2+ цифры) из ответа, которых нет в тексте фрагментов, помечаются
+      как непроверенные, уверенность снижается.
+    """
+
+    if not result.grounded or not result.sources:
+        return result
+    titles = {_norm_name(s.title) for s in result.sources}
+    corpus = " ".join(s.text or s.snippet or "" for s in result.sources)
+    corpus_digits_text = re.sub(r"(?<=\d)[  ](?=\d{3}\b)", "", corpus)
+    answer = result.answer
+    notes: list[str] = []
+
+    for match in _DOC_NAME_RE.finditer(answer):
+        name = match.group(0).strip()
+        norm = _norm_name(name)
+        if any(norm == t or norm in t or t in norm for t in titles):
+            continue
+        answer = answer.replace(name, f"«{name}» (источник не подтверждён)")
+        result.confidence = round(result.confidence * UNVERIFIED_DOC_PENALTY, 4)
+        notes.append(f"документ «{name}» не найден среди использованных фрагментов")
+        break  # одного штрафа за ответ достаточно
+
+    # Числа из названий файлов (даты в имени) не проверяем.
+    plain = _DOC_NAME_RE.sub(" ", result.answer)
+    plain = re.sub(r"(?<=\d)[  ](?=\d{3}\b)", "", plain)
+    unverified: list[str] = []
+    for match in _NUMBER_RE.finditer(plain):
+        raw = match.group(0).strip()
+        if len(_digits(raw)) < 2 or raw in unverified:
+            continue
+        if (
+            raw not in corpus_digits_text
+            and raw.replace(",", ".") not in corpus_digits_text
+        ):
+            unverified.append(raw)
+    if unverified:
+        result.confidence = round(result.confidence * UNVERIFIED_NUMBERS_PENALTY, 4)
+        notes.append("числа " + ", ".join(unverified[:5]) + " не найдены во фрагментах")
+
+    if notes:
+        answer += (
+            "\n\n⚠ Не удалось подтвердить по найденным фрагментам: "
+            + "; ".join(notes)
+            + ". Проверьте информацию в первоисточнике."
+        )
+    result.answer = answer
+    return result
+
+
 def ask_gemini_file_search(question: str) -> ProviderAnswer:
     api_key = live_settings.gemini_api_key
     if not api_key:
@@ -189,7 +274,7 @@ def parse_gemini_response(body: dict) -> ProviderAnswer:  # type: ignore[type-ar
     for chunk in chunks:
         context = chunk.get("retrievedContext") or {}
         title = str(context.get("title") or "Документ")
-        snippet = context.get("text")
+        snippet = strip_document_metadata(context.get("text"))
         key = (title, (snippet or "")[:80])
         if key in seen:
             continue
@@ -199,6 +284,7 @@ def parse_gemini_response(body: dict) -> ProviderAnswer:  # type: ignore[type-ar
             ProviderSource(
                 title=title,
                 snippet=(snippet or "")[:400] or None,
+                text=snippet or None,
                 ref=f"gemini-file-search: {title}" + (f", стр. {page}" if page else ""),
                 page=int(page) if page else None,
             )
@@ -216,12 +302,14 @@ def parse_gemini_response(body: dict) -> ProviderAnswer:  # type: ignore[type-ar
 
     grounded = bool(sources) and not _is_no_answer(answer)
     confidence = coverage if grounded else 0.0
-    return ProviderAnswer(
-        provider="gemini_file_search",
-        answer=answer,
-        grounded=grounded,
-        confidence=round(confidence, 4),
-        sources=sources,
+    return verify_answer_sources(
+        ProviderAnswer(
+            provider="gemini_file_search",
+            answer=answer,
+            grounded=grounded,
+            confidence=round(confidence, 4),
+            sources=sources,
+        )
     )
 
 
@@ -252,11 +340,12 @@ def parse_anythingllm_response(body: dict) -> ProviderAnswer:  # type: ignore[ty
         score = item.get("score")
         if isinstance(score, int | float):
             scores.append(float(score))
+        text = strip_document_metadata(str(item.get("text") or item.get("chunk") or ""))
         sources.append(
             ProviderSource(
                 title=title,
-                snippet=(str(item.get("text") or item.get("chunk") or ""))[:400]
-                or None,
+                snippet=text[:400] or None,
+                text=text or None,
                 ref=f"anythingllm: {title}",
                 score=float(score) if isinstance(score, int | float) else None,
             )
@@ -264,12 +353,14 @@ def parse_anythingllm_response(body: dict) -> ProviderAnswer:  # type: ignore[ty
     refused = answer.startswith(ANYTHINGLLM_REFUSAL_PREFIX)
     grounded = bool(sources) and not refused and not _is_no_answer(answer)
     confidence = max(scores) if scores else (1.0 if grounded else 0.0)
-    return ProviderAnswer(
-        provider="anythingllm",
-        answer=answer,
-        grounded=grounded,
-        confidence=round(min(1.0, confidence), 4) if grounded else 0.0,
-        sources=sources,
+    return verify_answer_sources(
+        ProviderAnswer(
+            provider="anythingllm",
+            answer=answer,
+            grounded=grounded,
+            confidence=round(min(1.0, confidence), 4) if grounded else 0.0,
+            sources=sources,
+        )
     )
 
 
@@ -421,6 +512,22 @@ def _anythingllm_title(document: dict[str, Any]) -> str:
     return str(document.get("filename") or document.get("docpath") or "")
 
 
+def _anythingllm_engine_document(document: dict[str, Any]) -> EngineDocument:
+    metadata = document.get("metadata")
+    if isinstance(metadata, str):
+        try:
+            metadata = json.loads(metadata)
+        except ValueError:
+            metadata = {}
+    words = metadata.get("wordCount") if isinstance(metadata, dict) else None
+    # Документ из workspace уже проиндексирован: AnythingLLM отдаёт только такие.
+    return EngineDocument(
+        name=_anythingllm_title(document),
+        state="В индексе",
+        word_count=int(words) if isinstance(words, int | float) else None,
+    )
+
+
 def list_anythingllm_documents(
     client: httpx.Client | None = None,
 ) -> list[EngineDocument]:
@@ -433,7 +540,7 @@ def list_anythingllm_documents(
         if isinstance(workspace, dict):
             workspace = [workspace]
         return [
-            EngineDocument(name=_anythingllm_title(document))
+            _anythingllm_engine_document(document)
             for ws in workspace
             for document in ws.get("documents") or []
         ]
