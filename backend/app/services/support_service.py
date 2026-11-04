@@ -26,6 +26,7 @@ from sqlalchemy.orm import defer
 from sqlalchemy.sql.elements import ColumnElement
 from sqlmodel import Session, col, delete, func, select
 
+from app.core import event_log
 from app.core.config import settings
 from app.models import (
     ActiveRequest,
@@ -1562,6 +1563,8 @@ def _record_support_result(
     route_reason: str,
     decision_metrics: DecisionMetrics,
     response_time_ms: int | None = None,
+    provider: str | None = None,
+    error: str | None = None,
 ) -> SupportAskResponse:
     """Сохраняет запрос, ответ, источники и при необходимости очередь оператора."""
 
@@ -1626,6 +1629,31 @@ def _record_support_result(
         )
 
     session.commit()
+    event_log.log_event(
+        "support.ask",
+        request_id=str(request.id),
+        user_id=str(user_id) if user_id else None,
+        session_id=session_id,
+        channel=payload.channel,
+        question=payload.question if settings.EVENT_LOG_QUESTIONS else None,
+        question_len=len(payload.question),
+        mode=mode,
+        provider="faq" if mode == "faq" else (provider or "legacy"),
+        route_reason=route_reason,
+        escalated=escalated,
+        escalation_reason=escalation_reason,
+        confidence=round(confidence, 4),
+        fallback_used=fallback_used,
+        response_time_ms=response_time_ms,
+        answer_len=len(answer_text),
+        sources=[item.source_title for item in sources[:5]],
+        top_score=round(decision_metrics.top_score, 4),
+        faq_score=round(decision_metrics.faq_score, 4),
+        relevant_chunks=decision_metrics.relevant_chunks,
+        critical=decision_metrics.critical,
+        conflict=decision_metrics.conflict,
+        error=error,
+    )
     return SupportAskResponse(
         request_id=request.id,
         session_id=session_id,
@@ -1676,13 +1704,21 @@ def _run_external_rag(
             payload=payload,
             session_id=session_id,
             response_time_ms=_elapsed_ms(started),
+            provider=provider,
             **kwargs,
         )
 
     try:
         result = rag_providers.ask_provider(payload.question, provider)
-    except Exception:
+    except Exception as exc:
+        event_log.log_event(
+            "rag.provider_error",
+            provider=provider,
+            error=f"{type(exc).__name__}: {exc}",
+            elapsed_ms=_elapsed_ms(started),
+        )
         return _record(
+            error=f"{type(exc).__name__}: {exc}",
             mode="operator",
             confidence=0.0,
             fallback_used=False,
@@ -1826,7 +1862,12 @@ def run_support_pipeline(
 
     try:
         retrieved = retrieve_relevant_chunks(session=session, question=payload.question)
-    except Exception:
+    except Exception as exc:
+        event_log.log_event(
+            "rag.retrieval_error",
+            provider="legacy",
+            error=f"{type(exc).__name__}: {exc}",
+        )
         decision_metrics = DecisionMetrics(
             top_score=0.0,
             relevant_chunks=0,
@@ -1905,7 +1946,10 @@ def run_support_pipeline(
 
     try:
         answer_text, fallback_used = generate_answer(payload.question, retrieved)
-    except Exception:
+    except Exception as exc:
+        event_log.log_event(
+            "rag.llm_error", provider="legacy", error=f"{type(exc).__name__}: {exc}"
+        )
         return _record_support_result(
             session=session,
             user_id=user_id,
