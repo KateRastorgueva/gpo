@@ -25,7 +25,7 @@ export async function logInUser(page: Page, email: string, password: string) {
   // Отдельной главной нет: "/" сразу уводит в основной раздел роли —
   // чат у пользователя или админ-раздел у админа/оператора.
   await page.waitForURL(/\/(support|admin-)/)
-  await expect(page.getByRole("link", { name: "Чат" })).toBeVisible()
+  await expect(page.getByTestId("user-menu")).toBeVisible()
 }
 
 export async function logOutUser(page: Page) {

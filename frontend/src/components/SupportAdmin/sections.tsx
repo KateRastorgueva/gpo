@@ -38,6 +38,25 @@ export type AdminSection = {
 
 export const ADMIN_SECTIONS: AdminSection[] = [
   {
+    value: "requests",
+    label: "Тикеты",
+    icon: Inbox,
+    children: [
+      {
+        value: "tickets",
+        label: "Тикеты",
+        permission: PERMISSIONS.TICKET_READ,
+        render: () => <TicketsPanel />,
+      },
+      {
+        value: "queue",
+        label: "Очередь и журнал",
+        permission: PERMISSIONS.TICKET_READ,
+        render: () => <RequestsPanel />,
+      },
+    ],
+  },
+  {
     value: "knowledge",
     label: "Знания",
     icon: BookOpen,
@@ -77,25 +96,6 @@ export const ADMIN_SECTIONS: AdminSection[] = [
         label: "Частые вопросы",
         permission: PERMISSIONS.KNOWLEDGE_READ,
         render: () => <FaqPanel />,
-      },
-    ],
-  },
-  {
-    value: "requests",
-    label: "Обращения",
-    icon: Inbox,
-    children: [
-      {
-        value: "queue",
-        label: "Очередь и журнал",
-        permission: PERMISSIONS.TICKET_READ,
-        render: () => <RequestsPanel />,
-      },
-      {
-        value: "tickets",
-        label: "Тикеты",
-        permission: PERMISSIONS.TICKET_READ,
-        render: () => <TicketsPanel />,
       },
     ],
   },

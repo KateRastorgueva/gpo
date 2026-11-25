@@ -20,19 +20,20 @@ const baseItems: Item[] = [
 export function AppSidebar() {
   const { user: currentUser } = usePermissions()
 
-  // Разделы появляются по правам роли: оператор видит «Обращения», но не
-  // управление пользователями, обычный пользователь — только базовые разделы.
-  const items: Item[] = [
-    ...baseItems,
-    ...sectionsFor(currentUser).map(
-      (section) =>
-        ({
-          icon: section.icon,
-          title: section.label,
-          path: sectionPath(section),
-        }) satisfies Item,
-    ),
-  ]
+  // Оператор и админ работают в админ-разделах (первый — «Тикеты»), а не в
+  // пользовательском чате; обычный пользователь видит только «Чат».
+  const sections = sectionsFor(currentUser)
+  const items: Item[] =
+    sections.length > 0
+      ? sections.map(
+          (section) =>
+            ({
+              icon: section.icon,
+              title: section.label,
+              path: sectionPath(section),
+            }) satisfies Item,
+        )
+      : baseItems
 
   return (
     <Sidebar collapsible="icon">

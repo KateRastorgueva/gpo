@@ -63,7 +63,7 @@ test("operator sees admin sections without knowledge editing", async ({
   await logInUser(page, email, password)
 
   // Разделы в левом меню: знания, обращения, метрики
-  for (const section of ["Знания", "Обращения", "Метрики"]) {
+  for (const section of ["Тикеты", "Знания", "Метрики"]) {
     await expect(page.getByRole("link", { name: section })).toBeVisible()
   }
 
@@ -80,7 +80,7 @@ test("operator sees admin sections without knowledge editing", async ({
 
   // Тикеты оператор может решать: предупреждение об отсутствии прав не показывается
   await page.goto("/admin-requests")
-  await page.getByRole("tab", { name: "Тикеты" }).click()
+  await page.getByRole("tab", { name: "Очередь и журнал" }).click()
   await expect(page.getByText(/Действия недоступны/)).toHaveCount(0)
 
   // Управление пользователями закрыто (вкладки нет)

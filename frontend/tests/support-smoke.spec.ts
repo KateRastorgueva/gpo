@@ -42,7 +42,7 @@ test("admin sections render with data", async ({ page }) => {
 
   // Старый адрес «Управления» ведёт в первый доступный раздел.
   await page.goto("/admin-support")
-  await expect(page).toHaveURL(/\/admin-knowledge/)
+  await expect(page).toHaveURL(/\/admin-requests/)
 
   // Метрики: карточки со значениями
   await page.goto("/admin-metrics")
@@ -55,7 +55,7 @@ test("admin sections render with data", async ({ page }) => {
   // Обращения: очередь и тикеты
   await page.goto("/admin-requests")
   await expect(
-    page.getByRole("heading", { name: "Обращения", exact: true }),
+    page.getByRole("heading", { name: "Тикеты", exact: true }),
   ).toBeVisible()
   await page.getByRole("tab", { name: "Тикеты" }).click()
   await expect(cardTitle(page, "Тикеты")).toBeVisible()

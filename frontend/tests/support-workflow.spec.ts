@@ -91,7 +91,7 @@ test("admin grants a role in the panel and the user gets access", async ({
   await page.getByTestId("password-input").fill(password)
   await page.getByRole("button", { name: "Log In" }).click()
   await page.waitForURL(/\/(support|admin-)/)
-  await expect(page.getByRole("link", { name: "Обращения" })).toBeVisible()
+  await expect(page.getByRole("link", { name: "Тикеты" })).toBeVisible()
   await expect(page.getByRole("link", { name: "Метрики" })).toBeVisible()
 })
 

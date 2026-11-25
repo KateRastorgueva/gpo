@@ -48,7 +48,7 @@ test("Log in with valid email and password ", async ({ page }) => {
 
   await page.waitForURL(/\/(support|admin-)/)
 
-  await expect(page.getByRole("link", { name: "Чат" })).toBeVisible()
+  await expect(page.getByTestId("user-menu")).toBeVisible()
 })
 
 test("Log in with invalid email", async ({ page }) => {
@@ -78,7 +78,7 @@ test("Successful log out", async ({ page }) => {
 
   await page.waitForURL(/\/(support|admin-)/)
 
-  await expect(page.getByRole("link", { name: "Чат" })).toBeVisible()
+  await expect(page.getByTestId("user-menu")).toBeVisible()
 
   await page.getByTestId("user-menu").click()
   await page.getByRole("menuitem", { name: "Log out" }).click()
@@ -93,7 +93,7 @@ test("Logged-out user cannot access protected routes", async ({ page }) => {
 
   await page.waitForURL(/\/(support|admin-)/)
 
-  await expect(page.getByRole("link", { name: "Чат" })).toBeVisible()
+  await expect(page.getByTestId("user-menu")).toBeVisible()
 
   await page.getByTestId("user-menu").click()
   await page.getByRole("menuitem", { name: "Log out" }).click()
