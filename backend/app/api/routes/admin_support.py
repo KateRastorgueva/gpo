@@ -40,6 +40,7 @@ from app.models import (
     Message,
     ReindexRequest,
     ReindexResponse,
+    SupportHistoryEntry,
     SupportMetricsPublic,
     SupportTicketPublic,
     SupportTicketsPublic,
@@ -65,6 +66,7 @@ from app.services.support_service import (
     get_doc,
     get_doc_public,
     get_faq_entry,
+    get_request_thread,
     get_source_public,
     get_support_metrics,
     get_ticket,
@@ -390,6 +392,20 @@ def resolve_support_ticket(
         )
     except SupportConflictError as exc:
         raise HTTPException(status_code=409, detail=str(exc))
+
+
+@router.get(
+    "/tickets/{ticket_id}/thread",
+    dependencies=[Depends(require_permission(TICKET_READ))],
+    response_model=SupportHistoryEntry,
+)
+def read_ticket_thread(*, session: SessionDep, ticket_id: uuid.UUID) -> Any:
+    """Переписка по тикету: вопрос, автоматический ответ и ответы оператора."""
+    ticket = _ticket_or_404(session, ticket_id)
+    thread = get_request_thread(session, ticket.request_id)
+    if thread is None:
+        raise HTTPException(status_code=404, detail="Request not found")
+    return thread
 
 
 @router.post(

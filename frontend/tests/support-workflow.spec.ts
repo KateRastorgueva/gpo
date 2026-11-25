@@ -103,7 +103,8 @@ test("operator answers an escalated question and the user sees the answer", asyn
   // рассмотрения обращений — скан без текстового слоя, в базе знаний его нет.
   // Заведомо вне базы знаний: такой вопрос гарантированно уходит оператору.
   const question = `Посоветуйте рецепт борща, кейс ${Date.now()}`
-  const answer = `Ответ оператора: стоимость проживания уточняется в деканате. ${Date.now()}`
+  const article = "https://help.tusur.ru/knowledgebase.php?article=105"
+  const answer = `Ответ оператора: смотрите [инструкцию по общежитиям](${article}). ${Date.now()}`
 
   // Пользователь задаёт вопрос, который уходит оператору
   const userContext = await browser.newContext()
@@ -135,20 +136,22 @@ test("operator answers an escalated question and the user sees the answer", asyn
   await expect(card).toBeVisible({ timeout: 15_000 })
   await expect(card.getByText("Открыт")).toBeVisible()
 
+  // Переписка открывается как чат: вопрос, автоответ с источниками и поле ответа.
+  await card.getByRole("button", { name: "Переписка" }).click()
+  const replyBox = card.getByLabel("Ответ пользователю")
+  await expect(replyBox).toBeVisible({ timeout: 15_000 })
+  await replyBox.fill(answer)
   await card.getByRole("button", { name: "Ответить и решить" }).click()
-  await operatorPage
-    .getByPlaceholder("Итоговое решение для пользователя")
-    .fill(answer)
-  await operatorPage.getByRole("button", { name: "Сохранить решение" }).click()
   await expect(card.getByText("Решён", { exact: true })).toBeVisible({
     timeout: 15_000,
   })
 
   // Ответ оператора появляется в истории пользователя (и в карточке ответа, поэтому first)
   await userPage.reload()
-  await expect(userPage.getByText(answer).first()).toBeVisible({
-    timeout: 15_000,
-  })
+  // Ответ оператора приходит в чат пользователя кликабельной ссылкой.
+  await expect(
+    userPage.getByRole("link", { name: "инструкцию по общежитиям" }).first(),
+  ).toBeVisible({ timeout: 15_000 })
   // Форма оценки спрятана в свёрнутый блок «Оценить ответ».
   await userPage.getByText("Оценить ответ").first().click()
   await expect(userPage.getByText("Оцените ответ").first()).toBeVisible()

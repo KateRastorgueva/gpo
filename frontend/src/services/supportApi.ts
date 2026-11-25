@@ -579,6 +579,12 @@ export const getOperatorQueue = () =>
     headers: authHeader(),
   })
 
+export const getTicketThread = (ticketId: string) =>
+  request<SupportHistoryEntry>(`/api/v1/admin/tickets/${ticketId}/thread`, {
+    method: "GET",
+    headers: authHeader(),
+  })
+
 export const assignTicket = (ticketId: string, assignedTo?: string | null) =>
   request<SupportTicket>(`/api/v1/admin/tickets/${ticketId}/assign`, {
     method: "POST",

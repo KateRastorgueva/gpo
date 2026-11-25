@@ -2524,49 +2524,68 @@ def list_support_history(
     for entry in entries:
         steps_map.setdefault(entry.request_id, []).append(entry)
 
-    history: list[SupportHistoryEntry] = []
-    for request in requests:
-        request_entries = steps_map.get(request.id, [])
-        # Поле `answer` сохраняет прежний контракт: это финальный шаг (или последний, если
-        # финального ещё нет — например, запрос ждёт оператора).
-        final_entry = next(
-            (entry for entry in reversed(request_entries) if entry.is_final),
-            request_entries[-1] if request_entries else None,
+    return [
+        _history_entry(request, steps_map.get(request.id, []))
+        for request in requests
+    ]
+
+
+def _history_entry(
+    request: SupportRequest, request_entries: list[SupportAnswer]
+) -> SupportHistoryEntry:
+    """Одно обращение со всеми шагами (для истории пользователя и треда тикета)."""
+
+    # Поле `answer` сохраняет прежний контракт: это финальный шаг (или последний, если
+    # финального ещё нет — например, запрос ждёт оператора).
+    final_entry = next(
+        (entry for entry in reversed(request_entries) if entry.is_final),
+        request_entries[-1] if request_entries else None,
+    )
+    steps = [
+        SupportHistoryStep(
+            step=entry.step,
+            step_index=entry.step_index,
+            answer=entry.answer,
+            is_final=entry.is_final,
+            performed_by=entry.performed_by,
+            knowledge_id=entry.knowledge_id,
+            knowledge_chunk_id=entry.knowledge_chunk_id,
+            response_time_ms=entry.response_time_ms,
+            sources=_sources_from_json(entry.sources_json),
+            created_at=entry.created_at,
         )
-        steps = [
-            SupportHistoryStep(
-                step=entry.step,
-                step_index=entry.step_index,
-                answer=entry.answer,
-                is_final=entry.is_final,
-                performed_by=entry.performed_by,
-                knowledge_id=entry.knowledge_id,
-                knowledge_chunk_id=entry.knowledge_chunk_id,
-                response_time_ms=entry.response_time_ms,
-                sources=_sources_from_json(entry.sources_json),
-                created_at=entry.created_at,
-            )
-            for entry in request_entries
-        ]
-        history.append(
-            SupportHistoryEntry(
-                request_id=request.id,
-                question=request.question,
-                mode=request.mode,
-                answer=final_entry.answer if final_entry else "",
-                sources=_sources_from_json(
-                    final_entry.sources_json if final_entry else None
-                ),
-                confidence=request.confidence,
-                escalated=request.escalated,
-                fallback_used=request.fallback_used,
-                status=request.status,
-                created_at=request.created_at,
-                session_id=request.session_id,
-                steps=steps,
-            )
-        )
-    return history
+        for entry in request_entries
+    ]
+    return SupportHistoryEntry(
+        request_id=request.id,
+        question=request.question,
+        mode=request.mode,
+        answer=final_entry.answer if final_entry else "",
+        sources=_sources_from_json(final_entry.sources_json if final_entry else None),
+        confidence=request.confidence,
+        escalated=request.escalated,
+        fallback_used=request.fallback_used,
+        status=request.status,
+        created_at=request.created_at,
+        session_id=request.session_id,
+        steps=steps,
+    )
+
+
+def get_request_thread(
+    session: Session, request_id: uuid.UUID
+) -> SupportHistoryEntry | None:
+    """Переписка по одному обращению (для оператора в тикете)."""
+
+    request = session.get(SupportRequest, request_id)
+    if request is None:
+        return None
+    entries = session.exec(
+        select(SupportAnswer)
+        .where(SupportAnswer.request_id == request_id)
+        .order_by(col(SupportAnswer.step_index))
+    ).all()
+    return _history_entry(request, list(entries))
 
 
 def _to_faq_public(source: KnowledgeSource) -> FaqEntryPublic:
