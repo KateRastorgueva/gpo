@@ -66,6 +66,8 @@ class SettingSpec:
     db_key: str | None = None
     # Значение по умолчанию для настроек, которых нет в .env (Settings).
     default: Any = None
+    # Пустая строка допустима (например, «эмбеддинги выключены»).
+    allow_empty: bool = False
 
     @property
     def storage_key(self) -> str:
@@ -265,6 +267,14 @@ SPECS: tuple[SettingSpec, ...] = (
         "url",
     ),
     SettingSpec("LMSTUDIO_MODEL", "lmstudio", "model", "Модель"),
+    SettingSpec(
+        "LMSTUDIO_EMBEDDINGS_MODEL",
+        "lmstudio",
+        "embeddingsModel",
+        "Модель эмбеддингов",
+        "Локальный векторный поиск встроенной базы (bge-m3). Пусто — без векторов.",
+        allow_empty=True,
+    ),
     SettingSpec(
         "LMSTUDIO_TIMEOUT_SECONDS",
         "lmstudio",
@@ -523,6 +533,8 @@ def parse_value(spec: SettingSpec, raw: Any) -> Any:
         return number
     text = str(raw).strip()
     if not text:
+        if spec.allow_empty:
+            return ""
         raise ValueError("пустое значение")
     if len(text) > 500:
         raise ValueError("слишком длинное значение")
