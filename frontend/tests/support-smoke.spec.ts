@@ -23,14 +23,12 @@ test("user support page renders form and history", async ({ page }) => {
   await page.goto("/support")
 
   await expect(
-    page.getByRole("heading", { name: "Техподдержка университета" }),
+    page.getByRole("heading", { name: "Техподдержка" }),
   ).toBeVisible()
   await expect(page.getByPlaceholder(/Опишите ваш вопрос/)).toBeVisible()
   await expect(page.getByRole("button", { name: "Отправить" })).toBeVisible()
 
-  // История либо содержит карточки обращений, либо показывает пустое состояние.
-  // CardTitle — это div, поэтому ищем по тексту, а не по роли heading.
-  await expect(page.getByText("История обращений")).toBeVisible()
+  // История либо содержит обращения, либо показывает пустое состояние чата.
   await expect(
     page.getByText(/Обращений пока нет|Вопрос|Ответ/).first(),
   ).toBeVisible()
@@ -46,10 +44,11 @@ test("admin support page renders all tabs with data", async ({ page }) => {
 
   await page.goto("/admin-support")
   await expect(
-    page.getByRole("heading", { name: "Администрирование поддержки" }),
+    page.getByRole("heading", { name: "Управление", exact: true }),
   ).toBeVisible()
 
-  // Метрики: карточки со значениями (вкладка по умолчанию)
+  // Метрики: карточки со значениями (вкладку открываем явно — по умолчанию «Знания»)
+  await page.getByRole("tab", { name: "Метрики" }).click()
   await expect(page.getByText("Всего запросов")).toBeVisible()
   await expect(page.getByText("Средняя оценка")).toBeVisible()
 
