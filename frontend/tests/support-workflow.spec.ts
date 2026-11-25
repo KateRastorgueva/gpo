@@ -134,15 +134,16 @@ test("operator answers an escalated question and the user sees the answer", asyn
     .getByTestId("ticket-card")
     .filter({ hasText: question })
   await expect(card).toBeVisible({ timeout: 15_000 })
-  await expect(card.getByText("Открыт")).toBeVisible()
+  await expect(card).toContainText("Открыт")
 
-  // Переписка открывается как чат: вопрос, автоответ с источниками и поле ответа.
-  await card.getByRole("button", { name: "Переписка" }).click()
-  const replyBox = card.getByLabel("Ответ пользователю")
+  // Переписка открывается на отдельной странице — большой чат оператора.
+  await card.getByRole("button", { name: "Открыть переписку" }).click()
+  await expect(operatorPage).toHaveURL(/\/ticket\//, { timeout: 15_000 })
+  const replyBox = operatorPage.getByLabel("Ответ пользователю")
   await expect(replyBox).toBeVisible({ timeout: 15_000 })
   await replyBox.fill(answer)
-  await card.getByRole("button", { name: "Ответить и решить" }).click()
-  await expect(card.getByText("Решён", { exact: true })).toBeVisible({
+  await operatorPage.getByRole("button", { name: "Ответить и решить" }).click()
+  await expect(operatorPage.getByText("Переоткрыть")).toBeVisible({
     timeout: 15_000,
   })
 

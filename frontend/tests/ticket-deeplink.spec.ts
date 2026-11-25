@@ -19,11 +19,11 @@ test("ticket has a shareable url", async ({ page, request }) => {
   expect(ticket).toBeTruthy()
 
   await page.goto(`/ticket/${ticket.ticket_id}`)
-  await expect(page.getByRole("heading", { name: "Тикет" })).toBeVisible()
-  const card = page.getByTestId("ticket-card").first()
-  await expect(card).toBeVisible({ timeout: 15000 })
-  // Тред раскрыт сразу: виден вопрос пользователя и блок переписки.
+  // Открывается большой чат оператора: переписка и поле ответа.
   await expect(page.getByLabel("Ответ пользователю")).toBeVisible({
+    timeout: 15000,
+  })
+  await expect(page.getByText(ticket.question).first()).toBeVisible({
     timeout: 15000,
   })
 })

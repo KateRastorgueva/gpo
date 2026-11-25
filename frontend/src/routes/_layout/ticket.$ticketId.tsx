@@ -1,10 +1,10 @@
 import { createFileRoute, redirect } from "@tanstack/react-router"
 
 import { UsersService } from "@/client"
-import { TicketsPanel } from "@/components/SupportAdmin/TicketsPanel"
+import { TicketChatPage } from "@/components/SupportAdmin/TicketChatPage"
 import { hasPermission, PERMISSIONS } from "@/lib/permissions"
 
-/** Ссылка на конкретный тикет: /ticket/<ticket_id> — переписка открыта сразу. */
+/** Чат оператора с пользователем: /ticket/<ticket_id> (слева список тикетов). */
 export const Route = createFileRoute("/_layout/ticket/$ticketId")({
   component: TicketPage,
   beforeLoad: async () => {
@@ -14,16 +14,11 @@ export const Route = createFileRoute("/_layout/ticket/$ticketId")({
     }
   },
   head: () => ({
-    meta: [{ title: "Тикет" }],
+    meta: [{ title: "Переписка по тикету" }],
   }),
 })
 
 function TicketPage() {
   const { ticketId } = Route.useParams()
-  return (
-    <div className="mx-auto grid w-full min-w-0 max-w-6xl grid-cols-1 gap-4">
-      <h1 className="text-2xl font-semibold">Тикет</h1>
-      <TicketsPanel initialTicketId={ticketId} />
-    </div>
-  )
+  return <TicketChatPage ticketId={ticketId} />
 }
