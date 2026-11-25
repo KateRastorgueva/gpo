@@ -14,7 +14,6 @@ from app.models import (
     DocTag,
     IngestItem,
     IngestJob,
-    Item,
     KnowledgeArchive,
     KnowledgeCategory,
     KnowledgeChunk,
@@ -51,7 +50,7 @@ def _assert_isolated_test_database() -> None:
         return
     raise RuntimeError(
         f"Refusing to run tests against database {database!r}: the test session deletes "
-        "all rows from app_user, item, faqentry, knowledge_source, knowledge_chunk, "
+        "all rows from app_user, knowledge_source, knowledge_chunk, "
         "request_journal, answer_journal and support_ticket.\n"
         f"Use a dedicated database, for example `POSTGRES_DB={database}{TEST_DB_SUFFIX} "
         "bash scripts/tests-start.sh`, or set "
@@ -84,8 +83,6 @@ def db() -> Generator[Session, None, None]:
         session.execute(delete(IngestItem))
         session.execute(delete(IngestJob))
         session.execute(delete(AppSetting))
-        statement = delete(Item)
-        session.execute(statement)
         statement = delete(User)
         session.execute(statement)
         session.commit()

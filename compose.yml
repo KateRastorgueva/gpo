@@ -205,24 +205,6 @@ services:
 
       # Enable redirection for HTTP and HTTPS
       - traefik.http.routers.${STACK_NAME?Variable not set}-frontend-http.middlewares=https-redirect
-  telegram-bot:
-    profiles: ["telegram"]
-    build:
-      context: ./bot
-      dockerfile: Dockerfile
-    environment:
-      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
-      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
-      - SEARCH_API_KEY=${SEARCH_API_KEY:-}
-      - BACKEND_API_URL=http://backend:8000
-    volumes:
-      - ./data:/app/data
-    depends_on:
-      - backend
-    restart: unless-stopped
-    networks:
-      - traefik-public
-      - default
   # Классификатор тем вопросов (модель Кати). Не стартует по умолчанию:
   # docker compose --profile intent up -d --build intent
   # Включается в админке: Управление -> Классификатор тем.

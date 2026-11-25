@@ -6,7 +6,6 @@ from app.api.routes import (
     admin_rag,
     admin_settings,
     admin_support,
-    items,
     login,
     private,
     support,
@@ -19,7 +18,6 @@ api_router = APIRouter()
 api_router.include_router(login.router)
 api_router.include_router(users.router)
 api_router.include_router(utils.router)
-api_router.include_router(items.router)
 api_router.include_router(support.router)
 api_router.include_router(admin_support.router)
 api_router.include_router(admin_rag.router)
