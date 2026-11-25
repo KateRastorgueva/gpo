@@ -7,6 +7,7 @@ import { FeedbackForm } from "@/components/Support/FeedbackForm"
 import { Message } from "@/components/Support/Message"
 import { Button } from "@/components/ui/button"
 import useCustomToast from "@/hooks/useCustomToast"
+import usePermissions from "@/hooks/usePermissions"
 import {
   askSupport,
   escalateSupport,
@@ -30,7 +31,23 @@ type Rejection = {
   createdAt: string
 }
 
-const STORAGE_KEY = "support_chats"
+// Ключи хранилища привязаны к пользователю: иначе на общем браузере
+// следующий вошедший видел чаты предыдущего (история — приватные данные).
+const STORAGE_PREFIX = "support_chats"
+const HIDDEN_PREFIX = "support_hidden_chats"
+
+const scopedKey = (prefix: string, userId: string | undefined) =>
+  `${prefix}:${userId ?? "anonymous"}`
+
+// Старый общий ключ мог остаться от предыдущего пользователя — убираем.
+const dropLegacyStorage = () => {
+  try {
+    localStorage.removeItem(STORAGE_PREFIX)
+    localStorage.removeItem(HIDDEN_PREFIX)
+  } catch {
+    // localStorage недоступен — чистить нечего
+  }
+}
 
 const EXAMPLE_PROMPTS = [
   "Где смотреть расписание занятий ТУСУР?",
@@ -39,18 +56,18 @@ const EXAMPLE_PROMPTS = [
   "Сколько длится академическая пара?",
 ]
 
-const loadChats = (): Chat[] => {
+const loadChats = (key: string): Chat[] => {
   try {
-    const stored = localStorage.getItem(STORAGE_KEY)
+    const stored = localStorage.getItem(key)
     return stored ? JSON.parse(stored) : []
   } catch {
     return []
   }
 }
 
-const storeChats = (chats: Chat[]) => {
+const storeChats = (key: string, chats: Chat[]) => {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(chats))
+    localStorage.setItem(key, JSON.stringify(chats))
   } catch {
     // localStorage недоступен (приватный режим) — чаты живут до перезагрузки
   }
@@ -58,21 +75,19 @@ const storeChats = (chats: Chat[]) => {
 
 // Удалённые из списка чаты: на сервере история остаётся (её видит оператор),
 // поэтому прячем их по session_id.
-const HIDDEN_KEY = "support_hidden_chats"
-
-const loadHidden = (): string[] => {
+const loadHidden = (key: string): string[] => {
   try {
-    return JSON.parse(localStorage.getItem(HIDDEN_KEY) ?? "[]")
+    return JSON.parse(localStorage.getItem(key) ?? "[]")
   } catch {
     return []
   }
 }
 
-const hideChat = (sessionId: string) => {
+const hideChat = (key: string, sessionId: string) => {
   try {
     localStorage.setItem(
-      HIDDEN_KEY,
-      JSON.stringify([...new Set([...loadHidden(), sessionId])]),
+      key,
+      JSON.stringify([...new Set([...loadHidden(key), sessionId])]),
     )
   } catch {
     // без localStorage чат вернётся после перезагрузки
@@ -124,19 +139,27 @@ export const Route = createFileRoute("/_layout/support")({
 function SupportPage() {
   const { showErrorToast } = useCustomToast()
   const queryClient = useQueryClient()
-  const [chats, setChats] = useState<Chat[]>(loadChats)
-  const [activeId, setActiveId] = useState<string | null>(
-    () => loadChats()[0]?.sessionId ?? null,
-  )
+  const { user: currentUser } = usePermissions()
+  const chatsKey = scopedKey(STORAGE_PREFIX, currentUser?.id)
+  const hiddenKey = scopedKey(HIDDEN_PREFIX, currentUser?.id)
+  const [chats, setChats] = useState<Chat[]>([])
+  const [activeId, setActiveId] = useState<string | null>(null)
   const [draft, setDraft] = useState("")
   const [pendingQuestion, setPendingQuestion] = useState<string | null>(null)
   const [rejections, setRejections] = useState<Rejection[]>([])
   const bottomRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
 
+  useEffect(() => {
+    dropLegacyStorage()
+    const own = loadChats(chatsKey)
+    setChats(own)
+    setActiveId(own[0]?.sessionId ?? null)
+  }, [chatsKey])
+
   const updateChats = (next: Chat[]) => {
     setChats(next)
-    storeChats(next)
+    storeChats(chatsKey, next)
   }
 
   const serverChatsQuery = useQuery({
@@ -146,7 +169,7 @@ function SupportPage() {
 
   // Склеиваем локальные чаты (в т.ч. только что созданные, пустые) с серверными.
   useEffect(() => {
-    const hidden = new Set(loadHidden())
+    const hidden = new Set(loadHidden(hiddenKey))
     const fromServer = chatsFromHistory(
       serverChatsQuery.data?.data ?? [],
     ).filter((chat) => !hidden.has(chat.sessionId))
@@ -166,11 +189,11 @@ function SupportPage() {
       const next = [...merged.values()].sort((a, b) =>
         b.lastMessageAt.localeCompare(a.lastMessageAt),
       )
-      storeChats(next)
+      storeChats(chatsKey, next)
       return next
     })
     setActiveId((id) => id ?? fromServer[0]?.sessionId ?? null)
-  }, [serverChatsQuery.data])
+  }, [serverChatsQuery.data, hiddenKey])
 
   const activeChat = chats.find((chat) => chat.sessionId === activeId) ?? null
 
@@ -288,7 +311,7 @@ function SupportPage() {
 
   const deleteChat = (sessionId: string) => {
     const next = chats.filter((chat) => chat.sessionId !== sessionId)
-    hideChat(sessionId)
+    hideChat(hiddenKey, sessionId)
     updateChats(next)
     queryClient.removeQueries({ queryKey: ["supportHistory", sessionId] })
     if (activeId === sessionId) setActiveId(next[0]?.sessionId ?? null)
