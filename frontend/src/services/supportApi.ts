@@ -614,6 +614,16 @@ export const getSupportMetrics = () =>
 
 /* ----------------------------- классификатор тем ---------------------------- */
 
+export type IntentCategory = { name: string; label: string }
+
+export type IntentEngine = {
+  name: "kate" | "helpdesk" | string
+  label: string
+  loaded: boolean
+  error?: string | null
+  categories: IntentCategory[]
+}
+
 export type IntentStatus = {
   enabled: boolean
   threshold: number
@@ -621,7 +631,9 @@ export type IntentStatus = {
   reachable: boolean
   model_loaded: boolean
   error?: string | null
-  categories: { name: string; label: string }[]
+  engine: string
+  engines: IntentEngine[]
+  categories: IntentCategory[]
 }
 
 export type IntentCandidate = {
@@ -643,6 +655,13 @@ export const getIntentStatus = () =>
   request<IntentStatus>("/api/v1/admin/intent/status", {
     method: "GET",
     headers: authHeader(),
+  })
+
+export const setIntentEngine = (engine: string) =>
+  request<IntentStatus>("/api/v1/admin/intent/engine", {
+    method: "PUT",
+    headers: jsonHeaders(),
+    body: JSON.stringify({ engine }),
   })
 
 export const testIntent = (question: string) =>

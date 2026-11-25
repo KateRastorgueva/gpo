@@ -438,6 +438,18 @@ SPECS: tuple[SettingSpec, ...] = (
         "В Docker — http://intent:8000.",
         default="http://intent:8000",
     ),
+    SettingSpec(
+        "INTENT_ENGINE",
+        "intent",
+        "engine",
+        "Движок классификатора",
+        "choice",
+        "kate — модель Кати на 24 студенческие темы; helpdesk — TF-IDF по базе "
+        "Help Desk, 22 темы IT-сервисов ТУСУР. Переключатель — во вкладке "
+        "«Классификатор тем».",
+        choices=("kate", "helpdesk"),
+        default="kate",
+    ),
 )
 
 SPECS_BY_KEY: dict[str, SettingSpec] = {s.key: s for s in SPECS}

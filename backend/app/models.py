@@ -1102,6 +1102,14 @@ class IntentCategoryPublic(SQLModel):
     label: str
 
 
+class IntentEngineOption(SQLModel):
+    name: str
+    label: str
+    loaded: bool = False
+    error: str | None = None
+    categories: list[IntentCategoryPublic] = Field(default_factory=list)
+
+
 class IntentStatusPublic(SQLModel):
     enabled: bool
     threshold: float = Field(ge=0.0, le=1.0)
@@ -1110,7 +1118,14 @@ class IntentStatusPublic(SQLModel):
     reachable: bool = False
     model_loaded: bool = False
     error: str | None = None
+    # Активный движок и все доступные (для переключателя в админке).
+    engine: str = "kate"
+    engines: list[IntentEngineOption] = Field(default_factory=list)
     categories: list[IntentCategoryPublic] = Field(default_factory=list)
+
+
+class IntentEngineUpdate(SQLModel):
+    engine: Literal["kate", "helpdesk"]
 
 
 class IntentTestRequest(SQLModel):

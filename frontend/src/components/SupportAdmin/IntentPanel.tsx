@@ -1,4 +1,4 @@
-import { useMutation, useQuery } from "@tanstack/react-query"
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { RefreshCw } from "lucide-react"
 import { useState } from "react"
 
@@ -8,17 +8,36 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { LoadingButton } from "@/components/ui/loading-button"
-import { getIntentStatus, testIntent } from "@/services/supportApi"
+import useCustomToast from "@/hooks/useCustomToast"
+import usePermissions from "@/hooks/usePermissions"
+import { PERMISSIONS } from "@/lib/permissions"
+import {
+  getIntentStatus,
+  setIntentEngine,
+  testIntent,
+} from "@/services/supportApi"
 
-// Классификатор тем (модель Кати): здесь состояние сервиса и проверка вопроса.
+// Классификатор тем: состояние сервиса, переключатель движка и проверка вопроса.
 // Включение, порог и адрес — во вкладке «Настройки → Классификатор тем».
 export function IntentPanel() {
+  const queryClient = useQueryClient()
+  const { showErrorToast, showSuccessToast } = useCustomToast()
+  const { has } = usePermissions()
+  const canSwitch = has(PERMISSIONS.SETTINGS_MANAGE)
   const [question, setQuestion] = useState("")
   const statusQuery = useQuery({
     queryKey: ["intentStatus"],
     queryFn: getIntentStatus,
   })
   const test = useMutation({ mutationFn: testIntent })
+  const switchEngine = useMutation({
+    mutationFn: setIntentEngine,
+    onSuccess: (data) => {
+      queryClient.setQueryData(["intentStatus"], data)
+      showSuccessToast("Движок классификатора переключён")
+    },
+    onError: (error: Error) => showErrorToast(error.message),
+  })
   const status = statusQuery.data
 
   let stateBadge = <Badge variant="outline">Проверяю…</Badge>
@@ -48,12 +67,11 @@ export function IntentPanel() {
         </CardHeader>
         <CardContent className="grid gap-3 text-sm">
           <p className="text-muted-foreground">
-            Модель называет тему вопроса (стипендия, общежитие, ГПО…). Тема
-            пишется в журнал, показывается в тикетах и метриках. На ответ
-            пользователю не влияет.
+            Модель называет тему вопроса. Тема пишется в журнал, показывается в
+            тикетах и метриках. На ответ пользователю не влияет.
           </p>
           {status ? (
-            <div className="grid gap-1">
+            <div className="grid gap-2">
               <div className="flex flex-wrap items-center gap-2">
                 {stateBadge}
                 <Badge variant={status.enabled ? "default" : "outline"}>
@@ -74,6 +92,45 @@ export function IntentPanel() {
                   <code>docker compose --profile intent up -d intent</code>
                 </p>
               ) : null}
+
+              <div className="grid gap-1">
+                <p className="text-xs text-muted-foreground">Движок:</p>
+                <div className="flex flex-wrap gap-2">
+                  {status.engines.map((engine) => (
+                    <Button
+                      key={engine.name}
+                      size="sm"
+                      variant={
+                        status.engine === engine.name ? "default" : "outline"
+                      }
+                      disabled={
+                        !canSwitch ||
+                        !engine.loaded ||
+                        switchEngine.isPending
+                      }
+                      title={
+                        engine.loaded
+                          ? undefined
+                          : engine.error || "Модель не загружена"
+                      }
+                      onClick={() => switchEngine.mutate(engine.name)}
+                    >
+                      {engine.label}
+                    </Button>
+                  ))}
+                </div>
+                {status.categories.length ? (
+                  <p className="text-xs text-muted-foreground">
+                    Тем у движка: {status.categories.length} —{" "}
+                    {status.categories
+                      .slice(0, 6)
+                      .map((item) => item.label)
+                      .join(", ")}
+                    {status.categories.length > 6 ? "…" : ""}
+                  </p>
+                ) : null}
+              </div>
+
               <p className="text-xs text-muted-foreground">
                 Включить и поменять порог — «Настройки → Классификатор тем».
               </p>

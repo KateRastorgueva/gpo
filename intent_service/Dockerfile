@@ -8,12 +8,20 @@ ENV PYTHONUNBUFFERED=1 \
 WORKDIR /srv
 
 # CPU-сборка PyTorch: без CUDA образ меньше примерно на 2 ГБ.
-RUN pip install torch==2.4.1 --index-url https://download.pytorch.org/whl/cpu
+# --extra-index-url, а не --index-url: иначе pip не находит build-зависимости
+# (flit_core и т.п.), которых нет в индексе PyTorch.
+RUN pip install torch==2.4.1 \
+        --index-url https://download.pytorch.org/whl/cpu \
+        --extra-index-url https://pypi.org/simple
 COPY requirements.txt .
 RUN pip install -r requirements.txt
 
 COPY fetch_model.py categories.py ./
 RUN python fetch_model.py
+
+# Второй движок: TF-IDF-модель по базе Help Desk (артефакт ~0.4 МБ).
+COPY models ./models
+COPY helpdesk.py ./
 
 COPY app.py .
 

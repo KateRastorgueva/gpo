@@ -7,8 +7,9 @@
 import os
 import threading
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
+import helpdesk
 import torch
 from categories import CATEGORIES, CATEGORY_LABELS
 from fastapi import FastAPI, HTTPException
@@ -96,9 +97,16 @@ def _get_model() -> _Model:
 app = FastAPI(title="Intent classifier")
 
 
+# Движки классификатора: kate — модель Кати (24 студенческие темы),
+# helpdesk — TF-IDF по базе Help Desk (22 темы IT-сервисов ТУСУР).
+EngineName = Literal["kate", "helpdesk"]
+ENGINES: tuple[str, ...] = ("kate", "helpdesk")
+
+
 class ClassifyRequest(BaseModel):
     text: str = Field(min_length=1, max_length=4000)
     top_k: int = Field(default=3, ge=1, le=24)
+    engine: EngineName = "kate"
 
 
 class Candidate(BaseModel):
@@ -112,6 +120,7 @@ class ClassifyResponse(BaseModel):
     label: str
     confidence: float
     candidates: list[Candidate]
+    engine: str = "kate"
 
 
 @app.on_event("startup")
@@ -120,19 +129,57 @@ def _warm_up() -> None:
         _get_model()
     except Exception:  # noqa: BLE001 - сервис поднимется, /health покажет ошибку
         pass
+    helpdesk.load()
 
 
 @app.get("/health")
 def health() -> dict[str, Any]:
+    """Состояние движков. ``ok``/``error``/``categories`` — про основной (kate)."""
     return {
         "ok": _model is not None,
         "error": _model_error,
         "categories": [{"name": c, "label": CATEGORY_LABELS[c]} for c in CATEGORIES],
+        "engines": [
+            {
+                "name": "kate",
+                "loaded": _model is not None,
+                "error": _model_error,
+                "categories": [
+                    {"name": c, "label": CATEGORY_LABELS[c]} for c in CATEGORIES
+                ],
+            },
+            {
+                "name": "helpdesk",
+                "loaded": helpdesk.is_loaded(),
+                "error": helpdesk.last_error(),
+                "categories": helpdesk.categories(),
+            },
+        ],
     }
 
 
 @app.post("/classify", response_model=ClassifyResponse)
 def classify(body: ClassifyRequest) -> ClassifyResponse:
+    if body.engine == "helpdesk":
+        helpdesk.load()
+        if not helpdesk.is_loaded():
+            raise HTTPException(
+                status_code=503, detail=helpdesk.last_error() or "helpdesk model not loaded"
+            )
+        ranked = helpdesk.predict(body.text, body.top_k)
+        candidates = [
+            Candidate(category=slug, label=label, confidence=round(p, 4))
+            for slug, label, p in ranked
+        ]
+        best = candidates[0]
+        return ClassifyResponse(
+            category=best.category,
+            label=best.label,
+            confidence=best.confidence,
+            candidates=candidates,
+            engine="helpdesk",
+        )
+
     try:
         model = _get_model()
     except Exception as exc:  # noqa: BLE001
@@ -148,4 +195,5 @@ def classify(body: ClassifyRequest) -> ClassifyResponse:
         label=best.label,
         confidence=best.confidence,
         candidates=candidates,
+        engine="kate",
     )

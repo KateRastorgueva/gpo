@@ -1,5 +1,6 @@
 """Классификатор тем (модель Кати): тема пишется в журнал, ошибки не мешают ответу."""
 
+import json
 import uuid
 from collections.abc import Callable, Iterator
 from typing import Any
@@ -195,3 +196,50 @@ def test_admin_status_and_test_endpoint(
     assert result["intent"] == "obshchaga"
     assert result["intent_label"] == "Общежитие"
     assert result["candidates"][0]["label"] == "Общежитие"
+
+def test_engine_switch_persists_and_passes_to_service(
+    client: TestClient,
+    superuser_token_headers: dict[str, str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Переключатель движка сохраняется и уходит в сервис вместе с вопросом."""
+    calls = _fake_service(monkeypatch, _answer("helpdesk_lichnyy_kabinet", 0.9))
+
+    r = client.put(
+        f"{API}/admin/intent/engine",
+        headers=superuser_token_headers,
+        json={"engine": "helpdesk"},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["engine"] == "helpdesk"
+
+    t = client.post(
+        f"{API}/admin/intent/test",
+        headers=superuser_token_headers,
+        json={"question": "Как войти в личный кабинет?"},
+    )
+    assert t.status_code == 200, t.text
+    payload = json.loads(calls[-1].content)
+    assert payload["engine"] == "helpdesk"
+
+
+def test_engine_switch_requires_settings_permission(
+    client: TestClient, normal_user_token_headers: dict[str, str]
+) -> None:
+    r = client.put(
+        f"{API}/admin/intent/engine",
+        headers=normal_user_token_headers,
+        json={"engine": "helpdesk"},
+    )
+    assert r.status_code == 403
+
+
+def test_engine_switch_rejects_unknown_engine(
+    client: TestClient, superuser_token_headers: dict[str, str]
+) -> None:
+    r = client.put(
+        f"{API}/admin/intent/engine",
+        headers=superuser_token_headers,
+        json={"engine": "nope"},
+    )
+    assert r.status_code == 422
