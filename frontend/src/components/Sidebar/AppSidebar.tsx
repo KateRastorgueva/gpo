@@ -1,6 +1,5 @@
 import {
   Headset,
-  Home,
   Settings2,
 } from "lucide-react"
 
@@ -17,7 +16,6 @@ import { type Item, Main } from "./Main"
 import { User } from "./User"
 
 const baseItems: Item[] = [
-  { icon: Home, title: "Главная", path: "/" },
   { icon: Headset, title: "Чат", path: "/support" },
 ]
 

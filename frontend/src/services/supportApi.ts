@@ -700,6 +700,7 @@ export type EngineDocuments = {
   error?: string | null
   data: {
     name: string
+    ref?: string | null
     state?: string | null
     size_bytes?: number | null
     word_count?: number | null
@@ -724,6 +725,13 @@ export const getEngineDocuments = (engine: RagEngine) =>
   request<EngineDocuments>(`/api/v1/admin/rag/documents${query({ engine })}`, {
     method: "GET",
     headers: authHeader(),
+  })
+
+export const deleteEngineDocument = (engine: RagEngine, ref: string) =>
+  request<{ message: string }>("/api/v1/admin/rag/documents", {
+    method: "DELETE",
+    headers: jsonHeaders(),
+    body: JSON.stringify({ engine, ref }),
   })
 
 export const createIngestJob = (target: IngestTarget, total: number) =>

@@ -40,6 +40,7 @@
 - `POST /api/v1/admin/tickets/{id}/assign`, `/resolve`, `/reopen`
 - `GET /api/v1/admin/metrics`
 - `GET /api/v1/users/roles` (справочник ролей для админки)
+- `GET /api/v1/admin/rag/documents?engine=gemini|anythingllm`, `DELETE` с `{engine, ref}` — список и удаление документов движка
 
 ## 3. Локальные сервисы Docker
 

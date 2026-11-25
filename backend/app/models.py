@@ -1035,6 +1035,11 @@ class RagProviderUpdate(SQLModel):
     provider: RagProviderName
 
 
+class EngineDocumentDelete(SQLModel):
+    engine: Literal["gemini", "anythingllm"]
+    ref: str
+
+
 class IngestJobCreate(SQLModel):
     target: IngestTarget
     total: int = Field(ge=1, le=1000)
@@ -1074,6 +1079,8 @@ class IngestJobsPublic(SQLModel):
 
 class EngineDocument(SQLModel):
     name: str
+    # Ссылка для удаления: docpath в AnythingLLM или ресурсное имя документа Gemini.
+    ref: str | None = None
     state: str | None = None
     size_bytes: int | None = None
     word_count: int | None = None

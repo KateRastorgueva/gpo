@@ -17,6 +17,7 @@ from app.api.deps import CurrentUser, SessionDep, require_permission
 from app.core.config import settings
 from app.core.permissions import KNOWLEDGE_READ, KNOWLEDGE_WRITE
 from app.models import (
+    EngineDocumentDelete,
     EngineDocumentsPublic,
     IngestItem,
     IngestJob,
@@ -24,6 +25,7 @@ from app.models import (
     IngestJobPublic,
     IngestJobsPublic,
     KnowledgeChunk,
+    Message,
     RagProviderOption,
     RagProviderPublic,
     RagProviderUpdate,
@@ -119,6 +121,27 @@ def list_engine_documents(engine: Literal["gemini", "anythingllm"]) -> Any:
     return EngineDocumentsPublic(
         engine=engine, configured=True, data=docs, count=len(docs)
     )
+
+
+@router.delete(
+    "/documents",
+    dependencies=[Depends(require_permission(KNOWLEDGE_WRITE))],
+    response_model=Message,
+)
+def delete_engine_document(body: EngineDocumentDelete) -> Any:
+    """Удаляет документ из внешнего движка (Gemini File Search или AnythingLLM)."""
+    provider = "gemini_file_search" if body.engine == "gemini" else "anythingllm"
+    if not rag_providers.is_provider_configured(provider):
+        raise HTTPException(status_code=400, detail="Движок не настроен")
+    if not body.ref.strip():
+        raise HTTPException(status_code=422, detail="Не указан документ")
+    try:
+        rag_providers.delete_engine_document(body.engine, body.ref)
+    except Exception as exc:  # noqa: BLE001 — ошибку движка показываем админу
+        raise HTTPException(
+            status_code=502, detail=f"{type(exc).__name__}: {exc}"[:500]
+        ) from exc
+    return Message(message="Документ удалён")
 
 
 @router.post(

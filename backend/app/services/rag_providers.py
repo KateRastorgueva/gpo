@@ -426,6 +426,7 @@ def list_gemini_documents(client: httpx.Client | None = None) -> list[EngineDocu
                 docs.append(
                     EngineDocument(
                         name=str(doc.get("displayName") or doc.get("name") or ""),
+                        ref=str(doc.get("name") or "") or None,
                         state=state or None,
                         size_bytes=int(size) if size is not None else None,
                     )
@@ -535,6 +536,7 @@ def _anythingllm_engine_document(document: dict[str, Any]) -> EngineDocument:
     # Документ из workspace уже проиндексирован: AnythingLLM отдаёт только такие.
     return EngineDocument(
         name=_anythingllm_title(document),
+        ref=str(document.get("docpath") or "") or None,
         state="В индексе",
         word_count=int(words) if isinstance(words, int | float) else None,
     )
@@ -594,3 +596,41 @@ def upload_anythingllm_document(
     finally:
         if own:
             client.close()
+
+def delete_anythingllm_document(ref: str) -> None:
+    """Удаляет документ из AnythingLLM (из всех workspace и из storage)."""
+
+    if not ref.strip():
+        raise ValueError("Пустая ссылка на документ")
+    with _anythingllm_client() as client:
+        # httpx.Client.delete() не принимает json= — шлём через request().
+        response = client.request(
+            "DELETE", "/system/remove-documents", json={"names": [ref]}
+        )
+        response.raise_for_status()
+
+
+def delete_gemini_document(ref: str) -> None:
+    """Удаляет документ из File Search store."""
+
+    if not ref.strip():
+        raise ValueError("Пустая ссылка на документ")
+    api_key, _ = _require_gemini()
+    with httpx.Client(timeout=60) as client:
+        response = client.delete(
+            f"{live_settings.GOOGLE_API_URL}/{ref}",
+            headers={"X-goog-api-key": api_key},
+        )
+        response.raise_for_status()
+
+
+def delete_engine_document(engine: str, ref: str) -> None:
+    """Удаляет документ из указанного движка."""
+
+    if engine == "gemini":
+        delete_gemini_document(ref)
+        return
+    if engine == "anythingllm":
+        delete_anythingllm_document(ref)
+        return
+    raise ValueError(f"Unknown engine: {engine}")
