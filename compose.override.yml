@@ -153,7 +153,7 @@ services:
     ports:
       - 9323:9323
 
-  # Готовый RAG-движок для сравнения с Gemini File Search (RAG_PROVIDER=anythingllm).
+  # Локальный RAG-движок (RAG_PROVIDER=anythingllm / переключатель в админке).
   # Не стартует по умолчанию: docker compose --profile anythingllm up -d anythingllm
   anythingllm:
     image: mintplexlabs/anythingllm:1.17.0
@@ -164,13 +164,17 @@ services:
       - "3001:3001"
     environment:
       - STORAGE_DIR=/app/server/storage
-      - LLM_PROVIDER=gemini
-      - GEMINI_API_KEY=${GEMINI_API_KEY:-${GOOGLE_API_KEY}}
-      - GEMINI_LLM_MODEL_PREF=gemini-flash-lite-latest
-      # Эмбеддинги считаются локально: у Gemini-эмбеддингов бесплатный
-      # поминутный лимит, AnythingLLM упирается в него на индексации.
-      - EMBEDDING_ENGINE=native
-      - EMBEDDING_MODEL_PREF=MintplexLabs/multilingual-e5-small
+      # Модели — локальные, через LM Studio на хосте (OpenAI-совместимый API :1234).
+      # Без облака: ключи Google/Gemini не нужны.
+      - LLM_PROVIDER=lmstudio
+      - LMSTUDIO_BASE_PATH=http://host.docker.internal:1234/v1
+      - LMSTUDIO_MODEL_PREF=qwen2.5-14b-instruct
+      - LMSTUDIO_MODEL_TOKEN_LIMIT=8192
+      - EMBEDDING_ENGINE=lmstudio
+      - EMBEDDING_BASE_PATH=http://host.docker.internal:1234/v1
+      - EMBEDDING_MODEL_PREF=text-embedding-bge-m3
+      # bge-m3 держит длинный контекст: без этого AnythingLLM режет чанки по дефолту
+      - EMBEDDING_MODEL_MAX_CHUNK_LENGTH=8192
       - VECTOR_DB=lancedb
       # OCR сканов: по умолчанию eng, русский текст превращается в мусор.
       - TARGET_OCR_LANG=rus,eng
