@@ -114,7 +114,8 @@ export function Message({
         ) : null}
         <RichText text={content} />
         {sources && sources.length > 0 ? (
-          <details className="mt-2 text-xs">
+          // open: ссылки на источники видны сразу, без клика по свёрнутому блоку.
+          <details className="mt-2 text-xs" open>
             <summary className="cursor-pointer text-muted-foreground">
               {mode === "operator" ? "Возможный контекст" : "Источники"} (
               {sources.length})
@@ -138,6 +139,11 @@ export function Message({
                     >
                       {source.source_ref}
                     </a>
+                  ) : source.source_ref ? (
+                    // PDF и файлы корпуса: ссылки нет, но видно, откуда взят ответ.
+                    <p className="break-all text-muted-foreground">
+                      файл: {source.source_ref}
+                    </p>
                   ) : null}
                   {source.snippet ? (
                     <p className="mt-1 text-muted-foreground">{source.snippet}</p>
