@@ -45,7 +45,9 @@
   поиск по базе знаний, цикл создания/удаления категории), `frontend/tests/roles.spec.ts`
   (доступы operator и user) и `frontend/tests/support-workflow.spec.ts`
   (выдача роли в админке; ответ оператора на эскалированный вопрос — целиком через UI).
-  Для сценариев сброса пароля нужен `docker compose up -d mailcatcher`.
+  Для сценариев сброса пароля нужен профиль `mail`:
+  `docker compose --profile mail up -d mailcatcher` + `SMTP_HOST=mailcatcher` в `.env`
+  (по умолчанию SMTP выключен).
 - **Грабли №1 (ловились как «нет разделения по ролям, оператор не может отвечать»):
   контейнер `frontend` отдаёт статическую сборку из образа.** Старый образ был собран
   ~5 месяцев назад, и на 5173 показывался UI без ролей, тикетов и отзывов. Лечится
@@ -92,9 +94,10 @@
 
 - Backend-тесты: **116 passed** на отдельной базе `app_test`
   (`docker compose run --rm --no-deps -v ./backend/tests:/app/backend/tests backend bash scripts/tests-start.sh`).
-- Playwright e2e: **71 passed** (`cd frontend && bunx playwright test`); backend, db и
-  mailcatcher должны быть запущены. Если контейнер `frontend` поднят, прогон идёт против
-  собранной сборки — сначала `docker compose build frontend`.
+- Playwright e2e: **71 passed** (`cd frontend && bunx playwright test`); backend и db
+  должны быть запущены (для сценариев сброса пароля — ещё `--profile mail`).
+  Если контейнер `frontend` поднят, прогон идёт против собранной сборки —
+  сначала `docker compose build frontend`.
 - `ruff` — чисто; `mypy` (strict) — 11 ошибок, все вне добавленного кода.
 - Покрытие backend-тестами: 80%.
 - Frontend: `tsc -p tsconfig.build.json` и `vite build` — без ошибок; `biome check` по

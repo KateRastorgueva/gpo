@@ -56,6 +56,9 @@ services:
       - "6333:6333"
 
   adminer:
+    # Dev-инструмент: не поднимается по умолчанию.
+    # Запуск: docker compose --profile tools up -d adminer
+    profiles: ["tools"]
     restart: "no"
     ports:
       - "8080:8080"
@@ -91,12 +94,18 @@ services:
     volumes:
       - ./backend/htmlcov:/app/backend/htmlcov
     environment:
-      SMTP_HOST: "mailcatcher"
-      SMTP_PORT: "1025"
-      SMTP_TLS: "false"
-      EMAILS_FROM_EMAIL: "noreply@example.com"
+      # SMTP по умолчанию выключен: писем в dev-стеке нет, ничего не стучится
+      # в несуществующий mailcatcher. Для проверки писем поднимите профиль mail
+      # и задайте SMTP_HOST=mailcatcher (см. docs/testing.md).
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-1025}
+      SMTP_TLS: ${SMTP_TLS:-false}
+      EMAILS_FROM_EMAIL: ${EMAILS_FROM_EMAIL:-noreply@example.com}
 
   mailcatcher:
+    # Перехватчик писем: только для проверки сброса пароля.
+    # Запуск: docker compose --profile mail up -d mailcatcher
+    profiles: ["mail"]
     image: schickling/mailcatcher
     ports:
       - "1080:1080"
@@ -117,6 +126,9 @@ services:
       - ./frontend/nginx-backend-proxy.conf:/etc/nginx/extra-conf.d/backend-not-found.conf:ro
 
   playwright:
+    # E2E-прогон в контейнере: не поднимается по умолчанию.
+    # Запуск: docker compose --profile e2e up --abort-on-container-exit playwright
+    profiles: ["e2e"]
     build:
       context: .
       dockerfile: frontend/Dockerfile.playwright

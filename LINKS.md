@@ -43,10 +43,13 @@
 
 ## 3. Локальные сервисы Docker
 
-- Qdrant API: <http://localhost:6333>
-- MailCatcher UI: <http://localhost:1080>
-- Adminer: <http://localhost:8080>
+По умолчанию поднимаются только `db`, `prestart`, `backend`, `frontend`, `proxy`.
+Остальное — по профилям.
+
 - Traefik (local): <http://localhost:8090>
+- Qdrant API: <http://localhost:6333> — `--profile qdrant`
+- MailCatcher UI: <http://localhost:1080> — `--profile mail`
+- Adminer: <http://localhost:8080> — `--profile tools`
 
 ## 4. Внешние LLM/Embeddings endpoint-ы
 

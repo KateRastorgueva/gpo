@@ -120,7 +120,11 @@ FAQ стал частью базы знаний, запросы живут по 
 
 ### Инфраструктура
 
-- `compose.yml`: db, qdrant, adminer, prestart, backend, frontend, telegram (профиль).
+- `compose.yml` + `compose.override.yml`. По умолчанию поднимаются только
+  `db`, `prestart`, `backend`, `frontend`, `proxy`. Остальное — по профилям:
+  `qdrant` (векторный поиск), `anythingllm` (локальный RAG-движок), `intent`
+  (классификация интентов), `tools` (adminer), `mail` (mailcatcher),
+  `e2e` (playwright в контейнере), `telegram` (вне scope web MVP).
 - Переменные окружения для Google/Ollama/Qdrant; ретенция архива — `KNOWLEDGE_ARCHIVE_MAX_VERSIONS`.
 - Тесты изолированы: `scripts/tests-start.sh` работает на отдельной базе `app_test`.
 - Telegram вынесен в профиль `telegram` и в web-флоу не участвует.

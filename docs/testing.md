@@ -51,8 +51,10 @@ bun run build                              # tsc + vite build
 
 Что нужно для прогона:
 
-- backend и db запущены (`docker compose up -d db qdrant backend`);
-- для сценариев сброса пароля — `docker compose up -d mailcatcher`;
+- backend и db запущены (`docker compose up -d db backend`);
+- для сценариев сброса пароля — профиль `mail`:
+  `docker compose --profile mail up -d mailcatcher` и `SMTP_HOST=mailcatcher` в `.env`
+  (по умолчанию SMTP выключен, письма никуда не отправляются);
 - Playwright сам поднимает dev-сервер (`webServer` в `playwright.config.ts`,
   `reuseExistingServer: true`). Если порт 5173 уже занят контейнером `frontend`,
   тесты пойдут против **собранной** сборки — это тоже валидная проверка, но образ

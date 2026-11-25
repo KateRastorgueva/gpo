@@ -62,7 +62,9 @@
 
 ### 3.4 Инфраструктура
 
-- Docker Compose: backend, frontend, db, qdrant, adminer, mailcatcher.
+- Docker Compose: ядро — `backend`, `frontend`, `db`, `prestart`, `proxy`;
+  опционально по профилям — `qdrant`, `anythingllm`, `intent`, `adminer` (`tools`),
+  `mailcatcher` (`mail`), `playwright` (`e2e`).
 - Локальные проверки и тесты через docker/shell.
 
 ## 4. GAP-анализ

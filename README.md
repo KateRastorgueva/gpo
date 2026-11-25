@@ -172,7 +172,7 @@ bun run test
 
 ## 9. SKILLS / MCP (коротко)
 
-- `playwright`: UI smoke/regression.
+- `playwright`: UI smoke/regression (`docker compose --profile e2e ...`).
 - `pdf`: задачи по PDF/ТЗ.
 - `openai-docs`: только когда вопрос про OpenAI-платформу.
 - MCP GitHub: PR/ревью/комментарии.
