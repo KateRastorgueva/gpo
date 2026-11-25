@@ -31,9 +31,11 @@ TIMEOUT_SECONDS = 2.0
 # app_setting (``cfg:INTENT_ENGINE``).
 ENGINES = ("kate", "helpdesk")
 DEFAULT_ENGINE = "kate"
+# Оба движка — Кати: старый (rubert-tiny2, 24 студенческие темы) и новый
+# (TF-IDF по базе Help Desk, 22 темы IT-сервисов ТУСУР).
 ENGINE_LABELS: dict[str, str] = {
-    "kate": "Модель Кати (rubert-tiny2, студенческие темы)",
-    "helpdesk": "Help Desk TF-IDF (IT-сервисы ТУСУР)",
+    "kate": "Катя: старая модель (24 студенческие темы)",
+    "helpdesk": "Катя: новая модель (22 темы сервисов)",
 }
 
 # Копия intent_service/categories.py: нужна для подписей в метриках и очереди,

@@ -1,10 +1,10 @@
 """Альтернативный классификатор тем: TF-IDF-модель по базе Help Desk ТУСУР.
 
-Отличие от основного движка (``kate``, rubert-tiny2 на 24 студенческих темах):
-этот обучен на 99 000 вопросов Help Desk и знает 22 темы **IT-сервисов** ТУСУР
-(«Личный кабинет», «Журнал посещаемости», «Облачное хранилище», «Бронирование
-помещений»…). Таксономии не пересекаются, поэтому движок включается
-переключателем, а не заменяет модель Кати.
+Оба движка — Кати. ``kate`` — старая модель (rubert-tiny2, 24 студенческие
+темы), ``helpdesk`` — новая: обучена на 99 000 вопросов Help Desk и знает 22
+темы **IT-сервисов** ТУСУР («Личный кабинет», «Журнал посещаемости», «Облачное
+хранилище», «Бронирование помещений»…). Таксономии не пересекаются, поэтому
+движок включается переключателем, а не заменяет старую модель.
 
 Артефакт — ``models/helpdesk_tfidf.npz``: словарь терминов, idf, веса
 логистической регрессии и классы. Он портативный (без pickled-объектов sklearn),
@@ -22,7 +22,6 @@ import os
 import re
 import threading
 from pathlib import Path
-from typing import Any
 
 import numpy as np
 
@@ -57,6 +56,15 @@ def slugify(name: str) -> str:
     latin = "".join(_TRANSLIT.get(char, char) for char in lowered)
     slug = re.sub(r"[^a-z0-9]+", "_", latin).strip("_")
     return slug or "category"
+
+
+def _pretty_label(name: str) -> str:
+    """Прямые кавычки из датасета -> «ёлочки», как в списке тем у Кати."""
+    if name.count('"') == 2:
+        first = name.index('"')
+        second = name.index('"', first + 1)
+        return f"{name[:first]}«{name[first + 1:second]}»{name[second + 1:]}"
+    return name
 
 
 def _build_categories(classes: list[str]) -> list[dict[str, str]]:
@@ -94,7 +102,7 @@ def load() -> None:
                 _idf = bundle["idf"].astype(np.float32)
                 _coef = bundle["coef"].astype(np.float32)
                 _intercept = bundle["intercept"].astype(np.float32)
-                _classes = [str(name) for name in bundle["classes"]]
+                _classes = [_pretty_label(str(name)) for name in bundle["classes"]]
                 _sublinear = bool(int(bundle["sublinear"][0]))
             _categories = _build_categories(_classes)
         except Exception as exc:  # noqa: BLE001 - причина видна в /health

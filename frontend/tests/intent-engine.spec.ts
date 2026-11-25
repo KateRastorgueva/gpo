@@ -9,8 +9,8 @@ test("intent engine switch works in the admin panel", async ({ page }) => {
   await expect(intentTab).toBeVisible({ timeout: 15000 })
   await intentTab.click()
 
-  const helpdesk = page.getByRole("button", { name: /Help Desk TF-IDF/i })
-  const kate = page.getByRole("button", { name: /Модель Кати/i })
+  const helpdesk = page.getByRole("button", { name: /новая модель/i })
+  const kate = page.getByRole("button", { name: /старая модель/i })
   await expect(helpdesk).toBeVisible({ timeout: 15000 })
   await expect(kate).toBeVisible()
 
