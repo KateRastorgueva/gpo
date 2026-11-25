@@ -296,6 +296,39 @@ def test_support_ask_marks_low_confidence_non_critical_answers(
     _assert_decision_metrics_shape(body)
 
 
+def test_support_history_is_scoped_to_current_user(
+    client: TestClient,
+    superuser_token_headers: dict[str, str],
+    normal_user_token_headers: dict[str, str],
+) -> None:
+    """Чужие обращения в истории не видны: список фильтруется по текущему пользователю."""
+    session_id = f"private-{uuid.uuid4()}"
+    created = client.post(
+        f"{settings.API_V1_STR}/support/ask",
+        headers=superuser_token_headers,
+        json={
+            "question": f"private {uuid.uuid4()}",
+            "session_id": session_id,
+            "channel": "web",
+        },
+    )
+    assert created.status_code == 200
+
+    own = client.get(
+        f"{settings.API_V1_STR}/support/history?session_id={session_id}",
+        headers=superuser_token_headers,
+    )
+    assert own.status_code == 200
+    assert own.json()["count"] == 1
+
+    other = client.get(
+        f"{settings.API_V1_STR}/support/history?session_id={session_id}",
+        headers=normal_user_token_headers,
+    )
+    assert other.status_code == 200
+    assert other.json()["count"] == 0
+
+
 def test_support_history_filters_by_session(
     client: TestClient, normal_user_token_headers: dict[str, str], db: Session
 ) -> None:
