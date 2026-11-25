@@ -101,6 +101,12 @@ GROUPS: tuple[GroupSpec, ...] = (
         "Пишет текст ответа, когда работает встроенный поиск и нет ключа Google.",
     ),
     GroupSpec(
+        "lmstudio",
+        "@ksup/llm-lmstudio",
+        "LLM встроенного поиска (LM Studio)",
+        "OpenAI-совместимый локальный сервер: ответ пишет локальная модель, ключи Google не нужны.",
+    ),
+    GroupSpec(
         "routing",
         "@ksup/routing",
         "Маршрутизация FAQ → RAG → оператор",
@@ -245,6 +251,23 @@ SPECS: tuple[SettingSpec, ...] = (
     SettingSpec(
         "OLLAMA_TIMEOUT_SECONDS",
         "llm",
+        "timeoutSeconds",
+        "Таймаут, с",
+        "int",
+        minimum=1,
+        maximum=600,
+    ),
+    SettingSpec(
+        "LMSTUDIO_BASE_URL",
+        "lmstudio",
+        "baseUrl",
+        "Адрес LM Studio (OpenAI-совместимый)",
+        "url",
+    ),
+    SettingSpec("LMSTUDIO_MODEL", "lmstudio", "model", "Модель"),
+    SettingSpec(
+        "LMSTUDIO_TIMEOUT_SECONDS",
+        "lmstudio",
         "timeoutSeconds",
         "Таймаут, с",
         "int",

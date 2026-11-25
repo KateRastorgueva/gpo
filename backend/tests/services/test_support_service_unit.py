@@ -165,6 +165,10 @@ def test_generate_answer_falls_back_to_ollama_test_double() -> None:
             side_effect=RuntimeError("google unavailable"),
         ) as google_mock,
         patch(
+            "app.services.support_service._generate_with_lmstudio",
+            side_effect=RuntimeError("lmstudio unavailable"),
+        ),
+        patch(
             "app.services.support_service._generate_with_ollama",
             return_value="Ответ из резервной модели",
         ) as ollama_mock,
@@ -178,3 +182,31 @@ def test_generate_answer_falls_back_to_ollama_test_double() -> None:
     assert fallback_used is True
     google_mock.assert_called_once()
     ollama_mock.assert_called_once()
+
+
+def test_generate_answer_prefers_lmstudio_over_ollama() -> None:
+    """Если ключа Google нет, ответ пишет LM Studio, а Ollama не трогается."""
+
+    with (
+        patch(
+            "app.services.support_service._generate_with_google",
+            side_effect=RuntimeError("google unavailable"),
+        ),
+        patch(
+            "app.services.support_service._generate_with_lmstudio",
+            return_value="Ответ от локальной модели",
+        ) as lmstudio_mock,
+        patch(
+            "app.services.support_service._generate_with_ollama",
+            return_value="Ответ из резервной модели",
+        ) as ollama_mock,
+    ):
+        answer, fallback_used = service.generate_answer(
+            "Где получить справку?",
+            [_result(snippet="Справка доступна в личном кабинете.", score=0.93)],
+        )
+
+    assert answer == "Ответ от локальной модели"
+    assert fallback_used is True
+    lmstudio_mock.assert_called_once()
+    ollama_mock.assert_not_called()

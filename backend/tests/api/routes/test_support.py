@@ -460,6 +460,10 @@ def test_generate_answer_falls_back_to_ollama() -> None:
             side_effect=RuntimeError("google-timeout"),
         ),
         patch(
+            "app.services.support_service._generate_with_lmstudio",
+            side_effect=RuntimeError("lmstudio-unavailable"),
+        ),
+        patch(
             "app.services.support_service._generate_with_ollama",
             return_value="Fallback answer",
         ),

@@ -1715,6 +1715,31 @@ def ingest_local_file(session: Session, filename: str, data: bytes) -> str:
     return "ok"
 
 
+def _generate_with_lmstudio(prompt: str) -> str:
+    """Генерирует ответ через OpenAI-совместимый сервер (LM Studio)."""
+
+    base = live_settings.LMSTUDIO_BASE_URL.strip().rstrip("/")
+    if not base:
+        raise RuntimeError("LMSTUDIO_BASE_URL is not configured")
+    payload = {
+        "model": live_settings.LMSTUDIO_MODEL,
+        "messages": [{"role": "user", "content": prompt}],
+        "temperature": 0.1,
+        "max_tokens": 1024,
+    }
+    with httpx.Client(timeout=live_settings.LMSTUDIO_TIMEOUT_SECONDS) as client:
+        response = client.post(f"{base}/chat/completions", json=payload)
+        response.raise_for_status()
+        body = response.json()
+    choices = body.get("choices") or []
+    if not choices:
+        raise RuntimeError("LM Studio returned no choices")
+    text = str((choices[0].get("message") or {}).get("content") or "").strip()
+    if not text:
+        raise RuntimeError("LM Studio returned empty text")
+    return text
+
+
 def generate_answer(question: str, results: list[RetrievalResult]) -> tuple[str, bool]:
     """Генерирует RAG-ответ и возвращает признак использования fallback."""
 
@@ -1722,7 +1747,11 @@ def generate_answer(question: str, results: list[RetrievalResult]) -> tuple[str,
     try:
         return _generate_with_google(prompt), False
     except Exception:
-        return _generate_with_ollama(prompt), True
+        # Локальная генерация: сначала LM Studio (если настроен), затем Ollama.
+        try:
+            return _generate_with_lmstudio(prompt), True
+        except Exception:
+            return _generate_with_ollama(prompt), True
 
 
 def _create_queue_item(session: Session, request_id: uuid.UUID, reason: str) -> None:
