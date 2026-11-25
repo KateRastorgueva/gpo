@@ -133,6 +133,16 @@ class Settings(BaseSettings):
     OLLAMA_MODEL: str = "llama3.1:8b"
     OLLAMA_TIMEOUT_SECONDS: int = 30
 
+    # LM Studio (OpenAI-совместимый сервер) для генерации во встроенном поиске.
+    # Пусто — LM Studio не используется. Из контейнера backend на хосте это
+    # http://host.docker.internal:1234/v1 (см. compose.override.yml).
+    LMSTUDIO_BASE_URL: str = ""
+    LMSTUDIO_MODEL: str = "qwen2.5-14b-instruct"
+    LMSTUDIO_TIMEOUT_SECONDS: int = 120
+    # Модель эмбеддингов на том же сервере для векторного поиска встроенной базы.
+    # Пусто — используется локальный rubert-mini (dense_local) или hashed.
+    LMSTUDIO_EMBEDDINGS_MODEL: str = ""
+
     # Векторный слой встроенного поиска (Qdrant + embeddings). Выключен — поиск
     # идёт только BM25 по чанкам в Postgres: не нужны ни контейнер Qdrant, ни
     # модель embeddings. При встроенном hashed-эмбеддере Qdrant качества почти не

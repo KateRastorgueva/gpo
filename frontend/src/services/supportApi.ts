@@ -579,6 +579,12 @@ export const getOperatorQueue = () =>
     headers: authHeader(),
   })
 
+export const getTicketThread = (ticketId: string) =>
+  request<SupportHistoryEntry>(`/api/v1/admin/tickets/${ticketId}/thread`, {
+    method: "GET",
+    headers: authHeader(),
+  })
+
 export const assignTicket = (ticketId: string, assignedTo?: string | null) =>
   request<SupportTicket>(`/api/v1/admin/tickets/${ticketId}/assign`, {
     method: "POST",
@@ -614,6 +620,16 @@ export const getSupportMetrics = () =>
 
 /* ----------------------------- классификатор тем ---------------------------- */
 
+export type IntentCategory = { name: string; label: string }
+
+export type IntentEngine = {
+  name: "kate" | "helpdesk" | string
+  label: string
+  loaded: boolean
+  error?: string | null
+  categories: IntentCategory[]
+}
+
 export type IntentStatus = {
   enabled: boolean
   threshold: number
@@ -621,7 +637,9 @@ export type IntentStatus = {
   reachable: boolean
   model_loaded: boolean
   error?: string | null
-  categories: { name: string; label: string }[]
+  engine: string
+  engines: IntentEngine[]
+  categories: IntentCategory[]
 }
 
 export type IntentCandidate = {
@@ -643,6 +661,13 @@ export const getIntentStatus = () =>
   request<IntentStatus>("/api/v1/admin/intent/status", {
     method: "GET",
     headers: authHeader(),
+  })
+
+export const setIntentEngine = (engine: string) =>
+  request<IntentStatus>("/api/v1/admin/intent/engine", {
+    method: "PUT",
+    headers: jsonHeaders(),
+    body: JSON.stringify({ engine }),
   })
 
 export const testIntent = (question: string) =>
@@ -700,6 +725,7 @@ export type EngineDocuments = {
   error?: string | null
   data: {
     name: string
+    ref?: string | null
     state?: string | null
     size_bytes?: number | null
     word_count?: number | null
@@ -724,6 +750,13 @@ export const getEngineDocuments = (engine: RagEngine) =>
   request<EngineDocuments>(`/api/v1/admin/rag/documents${query({ engine })}`, {
     method: "GET",
     headers: authHeader(),
+  })
+
+export const deleteEngineDocument = (engine: RagEngine, ref: string) =>
+  request<{ message: string }>("/api/v1/admin/rag/documents", {
+    method: "DELETE",
+    headers: jsonHeaders(),
+    body: JSON.stringify({ engine, ref }),
   })
 
 export const createIngestJob = (target: IngestTarget, total: number) =>

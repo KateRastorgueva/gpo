@@ -56,6 +56,9 @@ services:
       - "6333:6333"
 
   adminer:
+    # Dev-инструмент: не поднимается по умолчанию.
+    # Запуск: docker compose --profile tools up -d adminer
+    profiles: ["tools"]
     restart: "no"
     ports:
       - "8080:8080"
@@ -91,12 +94,22 @@ services:
     volumes:
       - ./backend/htmlcov:/app/backend/htmlcov
     environment:
-      SMTP_HOST: "mailcatcher"
-      SMTP_PORT: "1025"
-      SMTP_TLS: "false"
-      EMAILS_FROM_EMAIL: "noreply@example.com"
+      # SMTP по умолчанию выключен: писем в dev-стеке нет, ничего не стучится
+      # в несуществующий mailcatcher. Для проверки писем поднимите профиль mail
+      # и задайте SMTP_HOST=mailcatcher (см. docs/testing.md).
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-1025}
+      SMTP_TLS: ${SMTP_TLS:-false}
+      EMAILS_FROM_EMAIL: ${EMAILS_FROM_EMAIL:-noreply@example.com}
+      # Генерация ответа встроенным поиском (движок legacy) — локальная модель
+      # через LM Studio на хосте, если ключ Google не задан.
+      LMSTUDIO_BASE_URL: ${LMSTUDIO_BASE_URL:-http://host.docker.internal:1234/v1}
+      LMSTUDIO_MODEL: ${LMSTUDIO_MODEL:-qwen2.5-14b-instruct}
 
   mailcatcher:
+    # Перехватчик писем: только для проверки сброса пароля.
+    # Запуск: docker compose --profile mail up -d mailcatcher
+    profiles: ["mail"]
     image: schickling/mailcatcher
     ports:
       - "1080:1080"
@@ -117,6 +130,9 @@ services:
       - ./frontend/nginx-backend-proxy.conf:/etc/nginx/extra-conf.d/backend-not-found.conf:ro
 
   playwright:
+    # E2E-прогон в контейнере: не поднимается по умолчанию.
+    # Запуск: docker compose --profile e2e up --abort-on-container-exit playwright
+    profiles: ["e2e"]
     build:
       context: .
       dockerfile: frontend/Dockerfile.playwright
@@ -141,7 +157,7 @@ services:
     ports:
       - 9323:9323
 
-  # Готовый RAG-движок для сравнения с Gemini File Search (RAG_PROVIDER=anythingllm).
+  # Локальный RAG-движок (RAG_PROVIDER=anythingllm / переключатель в админке).
   # Не стартует по умолчанию: docker compose --profile anythingllm up -d anythingllm
   anythingllm:
     image: mintplexlabs/anythingllm:1.17.0
@@ -152,13 +168,17 @@ services:
       - "3001:3001"
     environment:
       - STORAGE_DIR=/app/server/storage
-      - LLM_PROVIDER=gemini
-      - GEMINI_API_KEY=${GEMINI_API_KEY:-${GOOGLE_API_KEY}}
-      - GEMINI_LLM_MODEL_PREF=gemini-flash-lite-latest
-      # Эмбеддинги считаются локально: у Gemini-эмбеддингов бесплатный
-      # поминутный лимит, AnythingLLM упирается в него на индексации.
-      - EMBEDDING_ENGINE=native
-      - EMBEDDING_MODEL_PREF=MintplexLabs/multilingual-e5-small
+      # Модели — локальные, через LM Studio на хосте (OpenAI-совместимый API :1234).
+      # Без облака: ключи Google/Gemini не нужны.
+      - LLM_PROVIDER=lmstudio
+      - LMSTUDIO_BASE_PATH=http://host.docker.internal:1234/v1
+      - LMSTUDIO_MODEL_PREF=qwen2.5-14b-instruct
+      - LMSTUDIO_MODEL_TOKEN_LIMIT=8192
+      - EMBEDDING_ENGINE=lmstudio
+      - EMBEDDING_BASE_PATH=http://host.docker.internal:1234/v1
+      - EMBEDDING_MODEL_PREF=text-embedding-bge-m3
+      # bge-m3 держит длинный контекст: без этого AnythingLLM режет чанки по дефолту
+      - EMBEDDING_MODEL_MAX_CHUNK_LENGTH=8192
       - VECTOR_DB=lancedb
       # OCR сканов: по умолчанию eng, русский текст превращается в мусор.
       - TARGET_OCR_LANG=rus,eng

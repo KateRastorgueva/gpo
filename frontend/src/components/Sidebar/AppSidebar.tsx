@@ -1,8 +1,4 @@
-import {
-  Headset,
-  Home,
-  Settings2,
-} from "lucide-react"
+import { Headset } from "lucide-react"
 
 import { SidebarAppearance } from "@/components/Common/Appearance"
 import { Logo } from "@/components/Common/Logo"
@@ -12,35 +8,32 @@ import {
   SidebarFooter,
   SidebarHeader,
 } from "@/components/ui/sidebar"
+import { sectionPath, sectionsFor } from "@/components/SupportAdmin/sections"
 import usePermissions from "@/hooks/usePermissions"
 import { type Item, Main } from "./Main"
 import { User } from "./User"
 
 const baseItems: Item[] = [
-  { icon: Home, title: "Главная", path: "/" },
   { icon: Headset, title: "Чат", path: "/support" },
 ]
 
 export function AppSidebar() {
-  const {
-    user: currentUser,
-    canOpenSupportAdmin,
-  } = usePermissions()
+  const { user: currentUser } = usePermissions()
 
-  // Разделы появляются по правам роли: оператор видит работу с обращениями,
-  // но не управление пользователями, обычный пользователь — только базовые разделы.
-  const items: Item[] = [
-    ...baseItems,
-    ...(canOpenSupportAdmin
-      ? [
-          {
-            icon: Settings2,
-            title: "Управление",
-            path: "/admin-support",
-          } satisfies Item,
-        ]
-      : []),
-  ]
+  // Оператор и админ работают в админ-разделах (первый — «Тикеты»), а не в
+  // пользовательском чате; обычный пользователь видит только «Чат».
+  const sections = sectionsFor(currentUser)
+  const items: Item[] =
+    sections.length > 0
+      ? sections.map(
+          (section) =>
+            ({
+              icon: section.icon,
+              title: section.label,
+              path: sectionPath(section),
+            }) satisfies Item,
+        )
+      : baseItems
 
   return (
     <Sidebar collapsible="icon">

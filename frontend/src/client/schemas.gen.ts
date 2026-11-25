@@ -85,6 +85,19 @@ export const ActiveRequestsPublicSchema = {
     title: 'ActiveRequestsPublic'
 } as const;
 
+export const Body_admin_rag_upload_ingest_fileSchema = {
+    properties: {
+        file: {
+            type: 'string',
+            format: 'binary',
+            title: 'File'
+        }
+    },
+    type: 'object',
+    required: ['file'],
+    title: 'Body_admin-rag-upload_ingest_file'
+} as const;
+
 export const Body_admin_support_upload_sourceSchema = {
     properties: {
         title: {
@@ -229,6 +242,89 @@ export const DecisionMetricsSchema = {
     },
     type: 'object',
     title: 'DecisionMetrics'
+} as const;
+
+export const EngineDocumentSchema = {
+    properties: {
+        name: {
+            type: 'string',
+            title: 'Name'
+        },
+        state: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'State'
+        },
+        size_bytes: {
+            anyOf: [
+                {
+                    type: 'integer'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Size Bytes'
+        },
+        word_count: {
+            anyOf: [
+                {
+                    type: 'integer'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Word Count'
+        }
+    },
+    type: 'object',
+    required: ['name'],
+    title: 'EngineDocument'
+} as const;
+
+export const EngineDocumentsPublicSchema = {
+    properties: {
+        engine: {
+            type: 'string',
+            title: 'Engine'
+        },
+        configured: {
+            type: 'boolean',
+            title: 'Configured'
+        },
+        error: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Error'
+        },
+        data: {
+            items: {
+                '$ref': '#/components/schemas/EngineDocument'
+            },
+            type: 'array',
+            title: 'Data'
+        },
+        count: {
+            type: 'integer',
+            title: 'Count'
+        }
+    },
+    type: 'object',
+    required: ['engine', 'configured', 'data', 'count'],
+    title: 'EngineDocumentsPublic'
 } as const;
 
 export const FaqEntriesPublicSchema = {
@@ -387,63 +483,70 @@ export const HTTPValidationErrorSchema = {
     title: 'HTTPValidationError'
 } as const;
 
-export const ItemCreateSchema = {
+export const IngestItemPublicSchema = {
     properties: {
-        title: {
-            type: 'string',
-            maxLength: 255,
-            minLength: 1,
-            title: 'Title'
-        },
-        description: {
-            anyOf: [
-                {
-                    type: 'string',
-                    maxLength: 255
-                },
-                {
-                    type: 'null'
-                }
-            ],
-            title: 'Description'
-        }
-    },
-    type: 'object',
-    required: ['title'],
-    title: 'ItemCreate'
-} as const;
-
-export const ItemPublicSchema = {
-    properties: {
-        title: {
-            type: 'string',
-            maxLength: 255,
-            minLength: 1,
-            title: 'Title'
-        },
-        description: {
-            anyOf: [
-                {
-                    type: 'string',
-                    maxLength: 255
-                },
-                {
-                    type: 'null'
-                }
-            ],
-            title: 'Description'
-        },
         id: {
             type: 'string',
             format: 'uuid',
             title: 'Id'
         },
-        owner_id: {
+        filename: {
             type: 'string',
-            format: 'uuid',
-            title: 'Owner Id'
+            title: 'Filename'
         },
-        created_at: {
+        size_bytes: {
+            type: 'integer',
+            title: 'Size Bytes'
+        },
+        status: {
+            type: 'string',
+            title: 'Status'
+        },
+        gemini_status: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Gemini Status'
+        },
+        anythingllm_status: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Anythingllm Status'
+        },
+        local_status: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Local Status'
+        },
+        error: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Error'
+        },
+        started_at: {
             anyOf: [
                 {
                     type: 'string',
@@ -453,51 +556,111 @@ export const ItemPublicSchema = {
                     type: 'null'
                 }
             ],
-            title: 'Created At'
-        }
-    },
-    type: 'object',
-    required: ['title', 'id', 'owner_id'],
-    title: 'ItemPublic'
-} as const;
-
-export const ItemUpdateSchema = {
-    properties: {
-        title: {
-            anyOf: [
-                {
-                    type: 'string',
-                    maxLength: 255,
-                    minLength: 1
-                },
-                {
-                    type: 'null'
-                }
-            ],
-            title: 'Title'
+            title: 'Started At'
         },
-        description: {
+        finished_at: {
             anyOf: [
                 {
                     type: 'string',
-                    maxLength: 255
+                    format: 'date-time'
                 },
                 {
                     type: 'null'
                 }
             ],
-            title: 'Description'
+            title: 'Finished At'
         }
     },
     type: 'object',
-    title: 'ItemUpdate'
+    required: ['id', 'filename', 'size_bytes', 'status'],
+    title: 'IngestItemPublic'
 } as const;
 
-export const ItemsPublicSchema = {
+export const IngestJobCreateSchema = {
+    properties: {
+        target: {
+            type: 'string',
+            enum: ['gemini', 'anythingllm', 'both', 'local'],
+            title: 'Target'
+        },
+        total: {
+            type: 'integer',
+            maximum: 1000,
+            minimum: 1,
+            title: 'Total'
+        }
+    },
+    type: 'object',
+    required: ['target', 'total'],
+    title: 'IngestJobCreate'
+} as const;
+
+export const IngestJobPublicSchema = {
+    properties: {
+        id: {
+            type: 'string',
+            format: 'uuid',
+            title: 'Id'
+        },
+        target: {
+            type: 'string',
+            title: 'Target'
+        },
+        total: {
+            type: 'integer',
+            title: 'Total'
+        },
+        uploaded: {
+            type: 'integer',
+            title: 'Uploaded'
+        },
+        done: {
+            type: 'integer',
+            title: 'Done'
+        },
+        failed: {
+            type: 'integer',
+            title: 'Failed'
+        },
+        finished: {
+            type: 'boolean',
+            title: 'Finished'
+        },
+        eta_seconds: {
+            anyOf: [
+                {
+                    type: 'integer'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Eta Seconds'
+        },
+        created_at: {
+            type: 'string',
+            format: 'date-time',
+            title: 'Created At'
+        },
+        items: {
+            items: {
+                '$ref': '#/components/schemas/IngestItemPublic'
+            },
+            type: 'array',
+            title: 'Items',
+            default: []
+        }
+    },
+    type: 'object',
+    required: ['id', 'target', 'total', 'uploaded', 'done', 'failed', 'finished', 'created_at'],
+    title: 'IngestJobPublic'
+} as const;
+
+export const IngestJobsPublicSchema = {
     properties: {
         data: {
             items: {
-                '$ref': '#/components/schemas/ItemPublic'
+                '$ref': '#/components/schemas/IngestJobPublic'
             },
             type: 'array',
             title: 'Data'
@@ -509,7 +672,193 @@ export const ItemsPublicSchema = {
     },
     type: 'object',
     required: ['data', 'count'],
-    title: 'ItemsPublic'
+    title: 'IngestJobsPublic'
+} as const;
+
+export const IntentCandidatePublicSchema = {
+    properties: {
+        category: {
+            type: 'string',
+            title: 'Category'
+        },
+        label: {
+            type: 'string',
+            title: 'Label'
+        },
+        confidence: {
+            type: 'number',
+            title: 'Confidence'
+        }
+    },
+    type: 'object',
+    required: ['category', 'label', 'confidence'],
+    title: 'IntentCandidatePublic'
+} as const;
+
+export const IntentCategoryPublicSchema = {
+    properties: {
+        name: {
+            type: 'string',
+            title: 'Name'
+        },
+        label: {
+            type: 'string',
+            title: 'Label'
+        }
+    },
+    type: 'object',
+    required: ['name', 'label'],
+    title: 'IntentCategoryPublic'
+} as const;
+
+export const IntentMetricSchema = {
+    properties: {
+        intent: {
+            type: 'string',
+            title: 'Intent'
+        },
+        label: {
+            type: 'string',
+            title: 'Label'
+        },
+        total: {
+            type: 'integer',
+            minimum: 0,
+            title: 'Total',
+            default: 0
+        },
+        operator_share: {
+            type: 'number',
+            maximum: 1,
+            minimum: 0,
+            title: 'Operator Share',
+            default: 0
+        }
+    },
+    type: 'object',
+    required: ['intent', 'label'],
+    title: 'IntentMetric'
+} as const;
+
+export const IntentStatusPublicSchema = {
+    properties: {
+        enabled: {
+            type: 'boolean',
+            title: 'Enabled'
+        },
+        threshold: {
+            type: 'number',
+            maximum: 1,
+            minimum: 0,
+            title: 'Threshold'
+        },
+        service_url: {
+            type: 'string',
+            title: 'Service Url'
+        },
+        reachable: {
+            type: 'boolean',
+            title: 'Reachable',
+            default: false
+        },
+        model_loaded: {
+            type: 'boolean',
+            title: 'Model Loaded',
+            default: false
+        },
+        error: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Error'
+        },
+        categories: {
+            items: {
+                '$ref': '#/components/schemas/IntentCategoryPublic'
+            },
+            type: 'array',
+            title: 'Categories'
+        }
+    },
+    type: 'object',
+    required: ['enabled', 'threshold', 'service_url'],
+    title: 'IntentStatusPublic'
+} as const;
+
+export const IntentTestPublicSchema = {
+    properties: {
+        intent: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Intent'
+        },
+        intent_label: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Intent Label'
+        },
+        confidence: {
+            type: 'number',
+            title: 'Confidence',
+            default: 0
+        },
+        threshold: {
+            type: 'number',
+            title: 'Threshold'
+        },
+        candidates: {
+            items: {
+                '$ref': '#/components/schemas/IntentCandidatePublic'
+            },
+            type: 'array',
+            title: 'Candidates'
+        },
+        error: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Error'
+        }
+    },
+    type: 'object',
+    required: ['threshold'],
+    title: 'IntentTestPublic'
+} as const;
+
+export const IntentTestRequestSchema = {
+    properties: {
+        question: {
+            type: 'string',
+            maxLength: 4000,
+            minLength: 1,
+            title: 'Question'
+        }
+    },
+    type: 'object',
+    required: ['question'],
+    title: 'IntentTestRequest'
 } as const;
 
 export const JournalRequestPublicSchema = {
@@ -554,6 +903,39 @@ export const JournalRequestPublicSchema = {
         escalated: {
             type: 'boolean',
             title: 'Escalated'
+        },
+        intent: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Intent'
+        },
+        intent_label: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Intent Label'
+        },
+        intent_confidence: {
+            anyOf: [
+                {
+                    type: 'number'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Intent Confidence'
         },
         created_at: {
             anyOf: [
@@ -1466,6 +1848,62 @@ export const PrivateUserCreateSchema = {
     title: 'PrivateUserCreate'
 } as const;
 
+export const RagProviderOptionSchema = {
+    properties: {
+        name: {
+            type: 'string',
+            title: 'Name'
+        },
+        label: {
+            type: 'string',
+            title: 'Label'
+        },
+        configured: {
+            type: 'boolean',
+            title: 'Configured'
+        }
+    },
+    type: 'object',
+    required: ['name', 'label', 'configured'],
+    title: 'RagProviderOption'
+} as const;
+
+export const RagProviderPublicSchema = {
+    properties: {
+        active: {
+            type: 'string',
+            title: 'Active'
+        },
+        default: {
+            type: 'string',
+            title: 'Default'
+        },
+        options: {
+            items: {
+                '$ref': '#/components/schemas/RagProviderOption'
+            },
+            type: 'array',
+            title: 'Options'
+        }
+    },
+    type: 'object',
+    required: ['active', 'default', 'options'],
+    title: 'RagProviderPublic'
+} as const;
+
+export const RagProviderUpdateSchema = {
+    properties: {
+        provider: {
+            type: 'string',
+            enum: ['legacy', 'search_only', 'gemini_file_search', 'anythingllm'],
+            title: 'Provider'
+        }
+    },
+    type: 'object',
+    required: ['provider'],
+    title: 'RagProviderUpdate'
+} as const;
+
 export const ReindexRequestSchema = {
     properties: {
         source_ids: {
@@ -1589,6 +2027,38 @@ export const RolesPublicSchema = {
     title: 'RolesPublic'
 } as const;
 
+export const SettingsImportSchema = {
+    properties: {
+        yaml: {
+            type: 'string',
+            maxLength: 100000,
+            title: 'Yaml'
+        }
+    },
+    type: 'object',
+    required: ['yaml'],
+    title: 'SettingsImport'
+} as const;
+
+export const SettingsUpdateSchema = {
+    properties: {
+        values: {
+            additionalProperties: true,
+            type: 'object',
+            title: 'Values'
+        },
+        reset: {
+            items: {
+                type: 'string'
+            },
+            type: 'array',
+            title: 'Reset'
+        }
+    },
+    type: 'object',
+    title: 'SettingsUpdate'
+} as const;
+
 export const SourceAttributionSchema = {
     properties: {
         source_id: {
@@ -1686,8 +2156,15 @@ export const SupportAskRequestSchema = {
 export const SupportAskResponseSchema = {
     properties: {
         request_id: {
-            type: 'string',
-            format: 'uuid',
+            anyOf: [
+                {
+                    type: 'string',
+                    format: 'uuid'
+                },
+                {
+                    type: 'null'
+                }
+            ],
             title: 'Request Id'
         },
         session_id: {
@@ -1696,7 +2173,7 @@ export const SupportAskResponseSchema = {
         },
         mode: {
             type: 'string',
-            enum: ['faq', 'rag', 'operator'],
+            enum: ['faq', 'rag', 'operator', 'reject'],
             title: 'Mode'
         },
         answer: {
@@ -1880,6 +2357,17 @@ export const SupportHistoryEntrySchema = {
             ],
             title: 'Created At'
         },
+        session_id: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Session Id'
+        },
         steps: {
             items: {
                 '$ref': '#/components/schemas/SupportHistoryStep'
@@ -2046,6 +2534,13 @@ export const SupportMetricsPublicSchema = {
             title: 'Empty Sources Share',
             default: 0
         },
+        by_intent: {
+            items: {
+                '$ref': '#/components/schemas/IntentMetric'
+            },
+            type: 'array',
+            title: 'By Intent'
+        },
         feedback_count: {
             type: 'integer',
             minimum: 0,
@@ -2087,6 +2582,28 @@ export const SupportTicketPublicSchema = {
         question: {
             type: 'string',
             title: 'Question'
+        },
+        intent: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Intent'
+        },
+        intent_label: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Intent Label'
         },
         assigned_to: {
             anyOf: [

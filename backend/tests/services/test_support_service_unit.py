@@ -14,11 +14,12 @@ def _result(
     chunk_id: uuid.UUID | None = None,
     snippet: str = "Student support portal answers requests.",
     score: float = 0.8,
+    source_ref: str = "https://example.edu/support",
 ) -> RetrievalResult:
     return RetrievalResult(
         source_id=source_id or uuid.uuid4(),
         source_title="Support source",
-        source_ref="https://example.edu/support",
+        source_ref=source_ref,
         chunk_id=chunk_id or uuid.uuid4(),
         snippet=snippet,
         score=score,
@@ -165,6 +166,10 @@ def test_generate_answer_falls_back_to_ollama_test_double() -> None:
             side_effect=RuntimeError("google unavailable"),
         ) as google_mock,
         patch(
+            "app.services.support_service._generate_with_lmstudio",
+            side_effect=RuntimeError("lmstudio unavailable"),
+        ),
+        patch(
             "app.services.support_service._generate_with_ollama",
             return_value="Ответ из резервной модели",
         ) as ollama_mock,
@@ -178,3 +183,76 @@ def test_generate_answer_falls_back_to_ollama_test_double() -> None:
     assert fallback_used is True
     google_mock.assert_called_once()
     ollama_mock.assert_called_once()
+
+
+def test_generate_answer_prefers_lmstudio_over_ollama() -> None:
+    """Если ключа Google нет, ответ пишет LM Studio, а Ollama не трогается."""
+
+    with (
+        patch(
+            "app.services.support_service._generate_with_google",
+            side_effect=RuntimeError("google unavailable"),
+        ),
+        patch(
+            "app.services.support_service._generate_with_lmstudio",
+            return_value="Ответ от локальной модели",
+        ) as lmstudio_mock,
+        patch(
+            "app.services.support_service._generate_with_ollama",
+            return_value="Ответ из резервной модели",
+        ) as ollama_mock,
+    ):
+        answer, fallback_used = service.generate_answer(
+            "Где получить справку?",
+            [_result(snippet="Справка доступна в личном кабинете.", score=0.93)],
+        )
+
+    assert answer == "Ответ от локальной модели"
+    assert fallback_used is True
+    lmstudio_mock.assert_called_once()
+    ollama_mock.assert_not_called()
+
+def test_sanitize_answer_links_keeps_only_source_links() -> None:
+    """В ответе остаются только ссылки из найденных источников."""
+    allowed = "https://help.tusur.ru/knowledgebase.php?article=135"
+    results = [
+        _result(snippet="Инструкция по справке.", score=0.9, source_ref=allowed)
+    ]
+    text = (
+        "Смотри [инструкцию](https://help.tusur.ru/knowledgebase.php?article=135) "
+        "и ещё [сайт](http://evil.example/fake)."
+    )
+
+    cleaned = service.sanitize_answer_links(text, results)
+
+    assert f"[инструкцию]({allowed})" in cleaned
+    assert "evil.example" not in cleaned
+    assert "сайт" in cleaned
+
+
+def test_sanitize_answer_links_removes_links_without_sources() -> None:
+    results = [_result(snippet="Файл устава.", score=0.9, source_ref="Ustav_2018.pdf")]
+
+    cleaned = service.sanitize_answer_links(
+        "Подробнее: https://example.org/x и [тут](https://example.org/y).", results
+    )
+
+    assert "example.org" not in cleaned
+
+def test_ensure_answer_links_appends_source_link() -> None:
+    """Если модель не вставила ссылку, в конце ответа появляется «Подробнее»."""
+    url = "https://help.tusur.ru/knowledgebase.php?article=135"
+    results = [_result(snippet="Инструкция.", score=0.9, source_ref=url)]
+
+    linked = service.ensure_answer_links("Готовый ответ без ссылок.", results)
+
+    assert "Подробнее" in linked
+    assert f"[Support source]({url})" in linked
+
+
+def test_ensure_answer_links_keeps_existing_link() -> None:
+    url = "https://help.tusur.ru/knowledgebase.php?article=135"
+    results = [_result(snippet="Инструкция.", score=0.9, source_ref=url)]
+    answer = f"Смотри [инструкцию]({url})."
+
+    assert service.ensure_answer_links(answer, results) == answer

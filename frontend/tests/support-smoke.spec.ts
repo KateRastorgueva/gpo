@@ -8,8 +8,6 @@ import { expect, type Page, test } from "@playwright/test"
  * поэтому его можно гонять на рабочей базе разработки.
  */
 
-const TABS = ["Метрики", "Обращения", "Знания", "Система"]
-
 /** Заголовок карточки: CardTitle рендерится как div, а не как heading. */
 const cardTitle = (page: Page, text: string) =>
   page.locator('[data-slot="card-title"]', { hasText: text })
@@ -23,14 +21,12 @@ test("user support page renders form and history", async ({ page }) => {
   await page.goto("/support")
 
   await expect(
-    page.getByRole("heading", { name: "Техподдержка университета" }),
+    page.getByRole("heading", { name: "Техподдержка" }),
   ).toBeVisible()
   await expect(page.getByPlaceholder(/Опишите ваш вопрос/)).toBeVisible()
   await expect(page.getByRole("button", { name: "Отправить" })).toBeVisible()
 
-  // История либо содержит карточки обращений, либо показывает пустое состояние.
-  // CardTitle — это div, поэтому ищем по тексту, а не по роли heading.
-  await expect(page.getByText("История обращений")).toBeVisible()
+  // История либо содержит обращения, либо показывает пустое состояние чата.
   await expect(
     page.getByText(/Обращений пока нет|Вопрос|Ответ/).first(),
   ).toBeVisible()
@@ -38,50 +34,45 @@ test("user support page renders form and history", async ({ page }) => {
   expect(consoleErrors).toEqual([])
 })
 
-test("admin support page renders all tabs with data", async ({ page }) => {
+test("admin sections render with data", async ({ page }) => {
   const consoleErrors: string[] = []
   page.on("console", (message) => {
     if (message.type() === "error") consoleErrors.push(message.text())
   })
 
+  // Старый адрес «Управления» ведёт в первый доступный раздел.
   await page.goto("/admin-support")
-  await expect(
-    page.getByRole("heading", { name: "Администрирование поддержки" }),
-  ).toBeVisible()
+  await expect(page).toHaveURL(/\/admin-requests/)
 
-  // Метрики: карточки со значениями (вкладка по умолчанию)
+  // Метрики: карточки со значениями
+  await page.goto("/admin-metrics")
+  await expect(
+    page.getByRole("heading", { name: "Метрики", exact: true }).first(),
+  ).toBeVisible()
   await expect(page.getByText("Всего запросов")).toBeVisible()
   await expect(page.getByText("Средняя оценка")).toBeVisible()
 
-  for (const tab of TABS) {
-    await page.getByRole("tab", { name: tab }).click()
-    await expect(page.getByRole("tab", { name: tab })).toHaveAttribute(
-      "data-state",
-      "active",
-    )
-  }
-
-  // Тикеты: либо список тикетов, либо пустое состояние
-  await page.getByRole("tab", { name: "Обращения" }).click()
+  // Обращения: очередь и тикеты
+  await page.goto("/admin-requests")
+  await expect(
+    page.getByRole("heading", { name: "Тикеты", exact: true }),
+  ).toBeVisible()
   await page.getByRole("tab", { name: "Тикеты" }).click()
   await expect(cardTitle(page, "Тикеты")).toBeVisible()
   await expect(page.getByText(/активных из \d+|Тикетов нет/)).toBeVisible()
 
-  // База знаний: таблица источников с колонкой действий
-  await page.getByRole("tab", { name: "Знания" }).click()
+  // Знания: источники, таксономия, проверка поиска
+  await page.goto("/admin-knowledge")
+  await expect(
+    page.getByRole("heading", { name: "Знания", exact: true }),
+  ).toBeVisible()
   await page.getByRole("tab", { name: "Источники" }).click()
   await expect(cardTitle(page, "Источники знаний")).toBeVisible()
-  await expect(
-    page.getByRole("button", { name: "Переиндексировать источники" }),
-  ).toBeVisible()
 
-  // Таксономия: формы создания категории и тэга
-  await page.getByRole("tab", { name: "Знания" }).click()
   await page.getByRole("tab", { name: "Категории и тэги" }).click()
   await expect(cardTitle(page, "Категории знаний")).toBeVisible()
   await expect(cardTitle(page, "Тэги")).toBeVisible()
 
-  // Поиск: реальный запрос к API с фильтрами
   await page.getByRole("tab", { name: "Проверка поиска" }).click()
   await page.getByPlaceholder("Поисковый запрос").fill("поступление")
   await page.getByRole("button", { name: "Найти" }).click()
@@ -91,13 +82,21 @@ test("admin support page renders all tabs with data", async ({ page }) => {
     timeout: 15_000,
   })
 
+  // Система: настройки, классификатор тем, пользователи
+  await page.goto("/admin-system")
+  await expect(
+    page.getByRole("heading", { name: "Система", exact: true }),
+  ).toBeVisible()
+  for (const tab of ["Настройки", "Классификатор тем", "Пользователи"]) {
+    await expect(page.getByRole("tab", { name: tab })).toBeVisible()
+  }
+
   expect(consoleErrors).toEqual([])
 })
 
 test("taxonomy create and delete round trip", async ({ page }) => {
   const name = `smoke-category-${Date.now()}`
-  await page.goto("/admin-support")
-  await page.getByRole("tab", { name: "Знания" }).click()
+  await page.goto("/admin-knowledge")
   await page.getByRole("tab", { name: "Категории и тэги" }).click()
 
   const categoryCard = page.locator('[data-slot="card"]', {

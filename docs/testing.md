@@ -37,6 +37,16 @@ docker compose run --rm -v ./backend/tests:/app/backend/tests \
 В CI тесты запускаются на раннере через `uv run bash scripts/tests-start.sh`
 (`.github/workflows/test-backend.yml`), там же применяется гейт покрытия.
 
+**Профиль RAG в тестах:** маршрутные тесты (`test_support.py`, `test_offtopic_filter.py`,
+`test_support_reference_60.py`) написаны под встроенный движок (`legacy`). Если в `.env`
+стоит `RAG_PROVIDER=anythingllm` или `gemini_file_search`, прогон пойдёт через внешний
+сервис и тесты упадут с `operator`/`retrieval_failure`. Для прогона задайте движок явно:
+
+```bash
+docker compose run --rm --no-deps -v ./backend/tests:/app/backend/tests \
+  -e RAG_PROVIDER=legacy backend bash scripts/tests-start.sh
+```
+
 ## 2. Frontend e2e (smoke)
 
 Из корня репозитория (bun-workspace, `frontend` — воркспейс):
@@ -51,8 +61,10 @@ bun run build                              # tsc + vite build
 
 Что нужно для прогона:
 
-- backend и db запущены (`docker compose up -d db qdrant backend`);
-- для сценариев сброса пароля — `docker compose up -d mailcatcher`;
+- backend и db запущены (`docker compose up -d db backend`);
+- для сценариев сброса пароля — профиль `mail`:
+  `docker compose --profile mail up -d mailcatcher` и `SMTP_HOST=mailcatcher` в `.env`
+  (по умолчанию SMTP выключен, письма никуда не отправляются);
 - Playwright сам поднимает dev-сервер (`webServer` в `playwright.config.ts`,
   `reuseExistingServer: true`). Если порт 5173 уже занят контейнером `frontend`,
   тесты пойдут против **собранной** сборки — это тоже валидная проверка, но образ

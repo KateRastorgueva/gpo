@@ -1,31 +1,23 @@
-import { createFileRoute } from "@tanstack/react-router"
+import { createFileRoute, redirect } from "@tanstack/react-router"
 
-import useAuth from "@/hooks/useAuth"
+import { UsersService } from "@/client"
+import { sectionPath, sectionsFor } from "@/components/SupportAdmin/sections"
 
 export const Route = createFileRoute("/_layout/")({
-  component: Dashboard,
+  // Отдельной «Главной» нет: после входа каждый попадает в свой основной раздел —
+  // админ и оператор в «Управление», обычный пользователь в чат поддержки.
+  beforeLoad: async () => {
+    let user = null
+    try {
+      user = await UsersService.readUserMe()
+    } catch {
+      user = null
+    }
+    const [section] = sectionsFor(user)
+    throw redirect({ to: section ? sectionPath(section) : "/support" })
+  },
+  component: () => null,
   head: () => ({
-    meta: [
-      {
-        title: "Dashboard - FastAPI Template",
-      },
-    ],
+    meta: [{ title: "Техподдержка ТУСУР" }],
   }),
 })
-
-function Dashboard() {
-  const { user: currentUser } = useAuth()
-
-  return (
-    <div>
-      <div>
-        <h1 className="text-2xl truncate max-w-sm">
-          Hi, {currentUser?.full_name || currentUser?.email} 👋
-        </h1>
-        <p className="text-muted-foreground">
-          Welcome back, nice to see you again!!!
-        </p>
-      </div>
-    </div>
-  )
-}

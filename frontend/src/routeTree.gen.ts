@@ -18,8 +18,14 @@ import { Route as LayoutIndexRouteImport } from './routes/_layout/index'
 import { Route as LayoutSupportRouteImport } from './routes/_layout/support'
 import { Route as LayoutSettingsRouteImport } from './routes/_layout/settings'
 import { Route as LayoutMyRequestsRouteImport } from './routes/_layout/my-requests'
+import { Route as LayoutAdminSystemRouteImport } from './routes/_layout/admin-system'
 import { Route as LayoutAdminSupportRouteImport } from './routes/_layout/admin-support'
+import { Route as LayoutAdminRequestsRouteImport } from './routes/_layout/admin-requests'
+import { Route as LayoutAdminMetricsRouteImport } from './routes/_layout/admin-metrics'
+import { Route as LayoutAdminKnowledgeRouteImport } from './routes/_layout/admin-knowledge'
 import { Route as LayoutAdminRouteImport } from './routes/_layout/admin'
+import { Route as LayoutTicketTicketIdRouteImport } from './routes/_layout/ticket.$ticketId'
+import { Route as LayoutChatChatIdRouteImport } from './routes/_layout/chat.$chatId'
 
 const SignupRoute = SignupRouteImport.update({
   id: '/signup',
@@ -65,14 +71,44 @@ const LayoutMyRequestsRoute = LayoutMyRequestsRouteImport.update({
   path: '/my-requests',
   getParentRoute: () => LayoutRoute,
 } as any)
+const LayoutAdminSystemRoute = LayoutAdminSystemRouteImport.update({
+  id: '/admin-system',
+  path: '/admin-system',
+  getParentRoute: () => LayoutRoute,
+} as any)
 const LayoutAdminSupportRoute = LayoutAdminSupportRouteImport.update({
   id: '/admin-support',
   path: '/admin-support',
   getParentRoute: () => LayoutRoute,
 } as any)
+const LayoutAdminRequestsRoute = LayoutAdminRequestsRouteImport.update({
+  id: '/admin-requests',
+  path: '/admin-requests',
+  getParentRoute: () => LayoutRoute,
+} as any)
+const LayoutAdminMetricsRoute = LayoutAdminMetricsRouteImport.update({
+  id: '/admin-metrics',
+  path: '/admin-metrics',
+  getParentRoute: () => LayoutRoute,
+} as any)
+const LayoutAdminKnowledgeRoute = LayoutAdminKnowledgeRouteImport.update({
+  id: '/admin-knowledge',
+  path: '/admin-knowledge',
+  getParentRoute: () => LayoutRoute,
+} as any)
 const LayoutAdminRoute = LayoutAdminRouteImport.update({
   id: '/admin',
   path: '/admin',
+  getParentRoute: () => LayoutRoute,
+} as any)
+const LayoutTicketTicketIdRoute = LayoutTicketTicketIdRouteImport.update({
+  id: '/ticket/$ticketId',
+  path: '/ticket/$ticketId',
+  getParentRoute: () => LayoutRoute,
+} as any)
+const LayoutChatChatIdRoute = LayoutChatChatIdRouteImport.update({
+  id: '/chat/$chatId',
+  path: '/chat/$chatId',
   getParentRoute: () => LayoutRoute,
 } as any)
 
@@ -83,10 +119,16 @@ export interface FileRoutesByFullPath {
   '/reset-password': typeof ResetPasswordRoute
   '/signup': typeof SignupRoute
   '/admin': typeof LayoutAdminRoute
+  '/admin-knowledge': typeof LayoutAdminKnowledgeRoute
+  '/admin-metrics': typeof LayoutAdminMetricsRoute
+  '/admin-requests': typeof LayoutAdminRequestsRoute
   '/admin-support': typeof LayoutAdminSupportRoute
+  '/admin-system': typeof LayoutAdminSystemRoute
   '/my-requests': typeof LayoutMyRequestsRoute
   '/settings': typeof LayoutSettingsRoute
   '/support': typeof LayoutSupportRoute
+  '/chat/$chatId': typeof LayoutChatChatIdRoute
+  '/ticket/$ticketId': typeof LayoutTicketTicketIdRoute
 }
 export interface FileRoutesByTo {
   '/login': typeof LoginRoute
@@ -94,11 +136,17 @@ export interface FileRoutesByTo {
   '/reset-password': typeof ResetPasswordRoute
   '/signup': typeof SignupRoute
   '/admin': typeof LayoutAdminRoute
+  '/admin-knowledge': typeof LayoutAdminKnowledgeRoute
+  '/admin-metrics': typeof LayoutAdminMetricsRoute
+  '/admin-requests': typeof LayoutAdminRequestsRoute
   '/admin-support': typeof LayoutAdminSupportRoute
+  '/admin-system': typeof LayoutAdminSystemRoute
   '/my-requests': typeof LayoutMyRequestsRoute
   '/settings': typeof LayoutSettingsRoute
   '/support': typeof LayoutSupportRoute
   '/': typeof LayoutIndexRoute
+  '/chat/$chatId': typeof LayoutChatChatIdRoute
+  '/ticket/$ticketId': typeof LayoutTicketTicketIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -108,11 +156,17 @@ export interface FileRoutesById {
   '/reset-password': typeof ResetPasswordRoute
   '/signup': typeof SignupRoute
   '/_layout/admin': typeof LayoutAdminRoute
+  '/_layout/admin-knowledge': typeof LayoutAdminKnowledgeRoute
+  '/_layout/admin-metrics': typeof LayoutAdminMetricsRoute
+  '/_layout/admin-requests': typeof LayoutAdminRequestsRoute
   '/_layout/admin-support': typeof LayoutAdminSupportRoute
+  '/_layout/admin-system': typeof LayoutAdminSystemRoute
   '/_layout/my-requests': typeof LayoutMyRequestsRoute
   '/_layout/settings': typeof LayoutSettingsRoute
   '/_layout/support': typeof LayoutSupportRoute
   '/_layout/': typeof LayoutIndexRoute
+  '/_layout/chat/$chatId': typeof LayoutChatChatIdRoute
+  '/_layout/ticket/$ticketId': typeof LayoutTicketTicketIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -123,10 +177,16 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/signup'
     | '/admin'
+    | '/admin-knowledge'
+    | '/admin-metrics'
+    | '/admin-requests'
     | '/admin-support'
+    | '/admin-system'
     | '/my-requests'
     | '/settings'
     | '/support'
+    | '/chat/$chatId'
+    | '/ticket/$ticketId'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/login'
@@ -134,11 +194,17 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/signup'
     | '/admin'
+    | '/admin-knowledge'
+    | '/admin-metrics'
+    | '/admin-requests'
     | '/admin-support'
+    | '/admin-system'
     | '/my-requests'
     | '/settings'
     | '/support'
     | '/'
+    | '/chat/$chatId'
+    | '/ticket/$ticketId'
   id:
     | '__root__'
     | '/_layout'
@@ -147,11 +213,17 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/signup'
     | '/_layout/admin'
+    | '/_layout/admin-knowledge'
+    | '/_layout/admin-metrics'
+    | '/_layout/admin-requests'
     | '/_layout/admin-support'
+    | '/_layout/admin-system'
     | '/_layout/my-requests'
     | '/_layout/settings'
     | '/_layout/support'
     | '/_layout/'
+    | '/_layout/chat/$chatId'
+    | '/_layout/ticket/$ticketId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -227,11 +299,39 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LayoutMyRequestsRouteImport
       parentRoute: typeof LayoutRoute
     }
+    '/_layout/admin-system': {
+      id: '/_layout/admin-system'
+      path: '/admin-system'
+      fullPath: '/admin-system'
+      preLoaderRoute: typeof LayoutAdminSystemRouteImport
+      parentRoute: typeof LayoutRoute
+    }
     '/_layout/admin-support': {
       id: '/_layout/admin-support'
       path: '/admin-support'
       fullPath: '/admin-support'
       preLoaderRoute: typeof LayoutAdminSupportRouteImport
+      parentRoute: typeof LayoutRoute
+    }
+    '/_layout/admin-requests': {
+      id: '/_layout/admin-requests'
+      path: '/admin-requests'
+      fullPath: '/admin-requests'
+      preLoaderRoute: typeof LayoutAdminRequestsRouteImport
+      parentRoute: typeof LayoutRoute
+    }
+    '/_layout/admin-metrics': {
+      id: '/_layout/admin-metrics'
+      path: '/admin-metrics'
+      fullPath: '/admin-metrics'
+      preLoaderRoute: typeof LayoutAdminMetricsRouteImport
+      parentRoute: typeof LayoutRoute
+    }
+    '/_layout/admin-knowledge': {
+      id: '/_layout/admin-knowledge'
+      path: '/admin-knowledge'
+      fullPath: '/admin-knowledge'
+      preLoaderRoute: typeof LayoutAdminKnowledgeRouteImport
       parentRoute: typeof LayoutRoute
     }
     '/_layout/admin': {
@@ -241,25 +341,51 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LayoutAdminRouteImport
       parentRoute: typeof LayoutRoute
     }
+    '/_layout/ticket/$ticketId': {
+      id: '/_layout/ticket/$ticketId'
+      path: '/ticket/$ticketId'
+      fullPath: '/ticket/$ticketId'
+      preLoaderRoute: typeof LayoutTicketTicketIdRouteImport
+      parentRoute: typeof LayoutRoute
+    }
+    '/_layout/chat/$chatId': {
+      id: '/_layout/chat/$chatId'
+      path: '/chat/$chatId'
+      fullPath: '/chat/$chatId'
+      preLoaderRoute: typeof LayoutChatChatIdRouteImport
+      parentRoute: typeof LayoutRoute
+    }
   }
 }
 
 interface LayoutRouteChildren {
   LayoutAdminRoute: typeof LayoutAdminRoute
+  LayoutAdminKnowledgeRoute: typeof LayoutAdminKnowledgeRoute
+  LayoutAdminMetricsRoute: typeof LayoutAdminMetricsRoute
+  LayoutAdminRequestsRoute: typeof LayoutAdminRequestsRoute
   LayoutAdminSupportRoute: typeof LayoutAdminSupportRoute
+  LayoutAdminSystemRoute: typeof LayoutAdminSystemRoute
   LayoutMyRequestsRoute: typeof LayoutMyRequestsRoute
   LayoutSettingsRoute: typeof LayoutSettingsRoute
   LayoutSupportRoute: typeof LayoutSupportRoute
   LayoutIndexRoute: typeof LayoutIndexRoute
+  LayoutChatChatIdRoute: typeof LayoutChatChatIdRoute
+  LayoutTicketTicketIdRoute: typeof LayoutTicketTicketIdRoute
 }
 
 const LayoutRouteChildren: LayoutRouteChildren = {
   LayoutAdminRoute: LayoutAdminRoute,
+  LayoutAdminKnowledgeRoute: LayoutAdminKnowledgeRoute,
+  LayoutAdminMetricsRoute: LayoutAdminMetricsRoute,
+  LayoutAdminRequestsRoute: LayoutAdminRequestsRoute,
   LayoutAdminSupportRoute: LayoutAdminSupportRoute,
+  LayoutAdminSystemRoute: LayoutAdminSystemRoute,
   LayoutMyRequestsRoute: LayoutMyRequestsRoute,
   LayoutSettingsRoute: LayoutSettingsRoute,
   LayoutSupportRoute: LayoutSupportRoute,
   LayoutIndexRoute: LayoutIndexRoute,
+  LayoutChatChatIdRoute: LayoutChatChatIdRoute,
+  LayoutTicketTicketIdRoute: LayoutTicketTicketIdRoute,
 }
 
 const LayoutRouteWithChildren =

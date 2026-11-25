@@ -57,12 +57,14 @@
   документы, категории и тэги, поиск с фильтрами, частые вопросы. Состав вкладок и
   доступные действия зависят от прав.
 - `/admin`: управление пользователями через выбор роли (справочник `GET /users/roles`).
-- e2e (Playwright): логин, регистрация, сброс пароля, items, админка, профиль
+- e2e (Playwright): логин, регистрация, сброс пароля, админка, профиль
   пользователя, smoke разделов поддержки и доступы ролей operator/user.
 
 ### 3.4 Инфраструктура
 
-- Docker Compose: backend, frontend, db, qdrant, adminer, mailcatcher.
+- Docker Compose: ядро — `backend`, `frontend`, `db`, `prestart`, `proxy`;
+  опционально по профилям — `qdrant`, `anythingllm`, `intent`, `adminer` (`tools`),
+  `mailcatcher` (`mail`), `playwright` (`e2e`).
 - Локальные проверки и тесты через docker/shell.
 
 ## 4. GAP-анализ

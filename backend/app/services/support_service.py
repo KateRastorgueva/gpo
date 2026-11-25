@@ -1553,7 +1553,10 @@ def _build_prompt(question: str, results: list[RetrievalResult]) -> str:
     return (
         "Ты ассистент техподдержки университета. Отвечай только на основе контекста.\n"
         "Если контекста недостаточно, скажи, что ответа нет.\n"
-        "Ответ должен быть кратким и практичным.\n\n"
+        "Ответ должен быть кратким и практичным.\n"
+        "Если у источника есть http-ссылка, укажи её прямо в тексте ответа "
+        "markdown-ссылкой: [короткое название](ссылка). Ссылки бери только из "
+        "контекста, не придумывай.\n\n"
         f"Вопрос пользователя:\n{question}\n\n"
         f"Подтверждающий контекст:\n{context_block}\n\n"
         "Сформируй ответ на русском языке."
@@ -1715,6 +1718,95 @@ def ingest_local_file(session: Session, filename: str, data: bytes) -> str:
     return "ok"
 
 
+def _generate_with_lmstudio(prompt: str) -> str:
+    """Генерирует ответ через OpenAI-совместимый сервер (LM Studio)."""
+
+    base = live_settings.LMSTUDIO_BASE_URL.strip().rstrip("/")
+    if not base:
+        raise RuntimeError("LMSTUDIO_BASE_URL is not configured")
+    payload = {
+        "model": live_settings.LMSTUDIO_MODEL,
+        "messages": [{"role": "user", "content": prompt}],
+        "temperature": 0.1,
+        "max_tokens": 1024,
+    }
+    with httpx.Client(timeout=live_settings.LMSTUDIO_TIMEOUT_SECONDS) as client:
+        response = client.post(f"{base}/chat/completions", json=payload)
+        response.raise_for_status()
+        body = response.json()
+    choices = body.get("choices") or []
+    if not choices:
+        raise RuntimeError("LM Studio returned no choices")
+    text = str((choices[0].get("message") or {}).get("content") or "").strip()
+    if not text:
+        raise RuntimeError("LM Studio returned empty text")
+    return text
+
+
+# Markdown-ссылка; закрывающая скобка необязательна — модель иногда обрывает.
+_MD_LINK_RE = re.compile(r"\[([^\]]+)\]\((https?://[^\s)]*)\)?")
+# Голый адрес, но не внутри markdown-ссылки (после "](").
+_BARE_URL_RE = re.compile(r"(?<!\]\()https?://[^\s<)]+")
+
+
+def _allowed_urls(results: list[RetrievalResult]) -> set[str]:
+    allowed: set[str] = set()
+    for result in results:
+        ref = (result.source_ref or "").strip()
+        if ref.startswith(("http://", "https://")):
+            allowed.add(ref.rstrip(".,;)"))
+    return allowed
+
+
+def sanitize_answer_links(answer: str, results: list[RetrievalResult]) -> str:
+    """Оставляет только ссылки из найденных источников и чинит оборванные.
+
+    Модель иногда придумывает URL: такой адрес вырезается, а текст ссылки
+    остаётся обычным словом.
+    """
+
+    allowed = _allowed_urls(results)
+
+    def _link(match: re.Match[str]) -> str:
+        text, url = match.group(1), match.group(2).rstrip(".,;)")
+        if url in allowed:
+            return f"[{text}]({url})"
+        return text
+
+    cleaned = _MD_LINK_RE.sub(_link, answer)
+    # Оборванные «[текст](» без адреса — оставляем только текст.
+    cleaned = re.sub(r"\[([^\]]*)\]\(\s*(?=[\s.,;!?]|$)", r"\1", cleaned)
+
+    def _bare(match: re.Match[str]) -> str:
+        url = match.group(0).rstrip(".,;)")
+        return match.group(0) if url in allowed else ""
+
+    cleaned = _BARE_URL_RE.sub(_bare, cleaned)
+    return re.sub(r"[ \t]{2,}", " ", cleaned)
+
+
+def ensure_answer_links(answer: str, results: list[RetrievalResult]) -> str:
+    """Добавляет ссылку на источник, если модель не вставила её сама.
+
+    Модель не обязана ссылаться; пользователь должен получить ссылку в любом
+    случае, поэтому в конец ответа добавляется строка «Подробнее: …».
+    """
+
+    allowed = _allowed_urls(results)
+    if not allowed or "](http" in answer:
+        return answer
+    links: list[str] = []
+    for result in results:
+        ref = (result.source_ref or "").strip().rstrip(".,;)")
+        if ref in allowed:
+            links.append(f"[{result.source_title}]({ref})")
+        if len(links) == 2:
+            break
+    if not links:
+        return answer
+    return f"{answer.rstrip()}\n\nПодробнее: {' · '.join(links)}"
+
+
 def generate_answer(question: str, results: list[RetrievalResult]) -> tuple[str, bool]:
     """Генерирует RAG-ответ и возвращает признак использования fallback."""
 
@@ -1722,7 +1814,11 @@ def generate_answer(question: str, results: list[RetrievalResult]) -> tuple[str,
     try:
         return _generate_with_google(prompt), False
     except Exception:
-        return _generate_with_ollama(prompt), True
+        # Локальная генерация: сначала LM Studio (если настроен), затем Ollama.
+        try:
+            return _generate_with_lmstudio(prompt), True
+        except Exception:
+            return _generate_with_ollama(prompt), True
 
 
 def _create_queue_item(session: Session, request_id: uuid.UUID, reason: str) -> None:
@@ -2310,6 +2406,9 @@ def run_support_pipeline(
 
     try:
         answer_text, fallback_used = generate_answer(payload.question, retrieved)
+        answer_text = ensure_answer_links(
+            sanitize_answer_links(answer_text, retrieved), retrieved
+        )
     except Exception as exc:
         event_log.log_event(
             "rag.llm_error", provider="legacy", error=f"{type(exc).__name__}: {exc}"
@@ -2425,49 +2524,68 @@ def list_support_history(
     for entry in entries:
         steps_map.setdefault(entry.request_id, []).append(entry)
 
-    history: list[SupportHistoryEntry] = []
-    for request in requests:
-        request_entries = steps_map.get(request.id, [])
-        # Поле `answer` сохраняет прежний контракт: это финальный шаг (или последний, если
-        # финального ещё нет — например, запрос ждёт оператора).
-        final_entry = next(
-            (entry for entry in reversed(request_entries) if entry.is_final),
-            request_entries[-1] if request_entries else None,
+    return [
+        _history_entry(request, steps_map.get(request.id, []))
+        for request in requests
+    ]
+
+
+def _history_entry(
+    request: SupportRequest, request_entries: list[SupportAnswer]
+) -> SupportHistoryEntry:
+    """Одно обращение со всеми шагами (для истории пользователя и треда тикета)."""
+
+    # Поле `answer` сохраняет прежний контракт: это финальный шаг (или последний, если
+    # финального ещё нет — например, запрос ждёт оператора).
+    final_entry = next(
+        (entry for entry in reversed(request_entries) if entry.is_final),
+        request_entries[-1] if request_entries else None,
+    )
+    steps = [
+        SupportHistoryStep(
+            step=entry.step,
+            step_index=entry.step_index,
+            answer=entry.answer,
+            is_final=entry.is_final,
+            performed_by=entry.performed_by,
+            knowledge_id=entry.knowledge_id,
+            knowledge_chunk_id=entry.knowledge_chunk_id,
+            response_time_ms=entry.response_time_ms,
+            sources=_sources_from_json(entry.sources_json),
+            created_at=entry.created_at,
         )
-        steps = [
-            SupportHistoryStep(
-                step=entry.step,
-                step_index=entry.step_index,
-                answer=entry.answer,
-                is_final=entry.is_final,
-                performed_by=entry.performed_by,
-                knowledge_id=entry.knowledge_id,
-                knowledge_chunk_id=entry.knowledge_chunk_id,
-                response_time_ms=entry.response_time_ms,
-                sources=_sources_from_json(entry.sources_json),
-                created_at=entry.created_at,
-            )
-            for entry in request_entries
-        ]
-        history.append(
-            SupportHistoryEntry(
-                request_id=request.id,
-                question=request.question,
-                mode=request.mode,
-                answer=final_entry.answer if final_entry else "",
-                sources=_sources_from_json(
-                    final_entry.sources_json if final_entry else None
-                ),
-                confidence=request.confidence,
-                escalated=request.escalated,
-                fallback_used=request.fallback_used,
-                status=request.status,
-                created_at=request.created_at,
-                session_id=request.session_id,
-                steps=steps,
-            )
-        )
-    return history
+        for entry in request_entries
+    ]
+    return SupportHistoryEntry(
+        request_id=request.id,
+        question=request.question,
+        mode=request.mode,
+        answer=final_entry.answer if final_entry else "",
+        sources=_sources_from_json(final_entry.sources_json if final_entry else None),
+        confidence=request.confidence,
+        escalated=request.escalated,
+        fallback_used=request.fallback_used,
+        status=request.status,
+        created_at=request.created_at,
+        session_id=request.session_id,
+        steps=steps,
+    )
+
+
+def get_request_thread(
+    session: Session, request_id: uuid.UUID
+) -> SupportHistoryEntry | None:
+    """Переписка по одному обращению (для оператора в тикете)."""
+
+    request = session.get(SupportRequest, request_id)
+    if request is None:
+        return None
+    entries = session.exec(
+        select(SupportAnswer)
+        .where(SupportAnswer.request_id == request_id)
+        .order_by(col(SupportAnswer.step_index))
+    ).all()
+    return _history_entry(request, list(entries))
 
 
 def _to_faq_public(source: KnowledgeSource) -> FaqEntryPublic:

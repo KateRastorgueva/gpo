@@ -16,6 +16,10 @@ export type ActiveRequestsPublic = {
     count: number;
 };
 
+export type Body_admin_rag_upload_ingest_file = {
+    file: (Blob | File);
+};
+
 export type Body_admin_support_upload_source = {
     title?: (string | null);
     source_url?: (string | null);
@@ -38,6 +42,21 @@ export type DecisionMetrics = {
     faq_score?: number;
     conflict?: boolean;
     critical?: boolean;
+};
+
+export type EngineDocument = {
+    name: string;
+    state?: (string | null);
+    size_bytes?: (number | null);
+    word_count?: (number | null);
+};
+
+export type EngineDocumentsPublic = {
+    engine: string;
+    configured: boolean;
+    error?: (string | null);
+    data: Array<EngineDocument>;
+    count: number;
 };
 
 export type FaqEntriesPublic = {
@@ -70,27 +89,83 @@ export type HTTPValidationError = {
     detail?: Array<ValidationError>;
 };
 
-export type ItemCreate = {
-    title: string;
-    description?: (string | null);
-};
-
-export type ItemPublic = {
-    title: string;
-    description?: (string | null);
+export type IngestItemPublic = {
     id: string;
-    owner_id: string;
-    created_at?: (string | null);
+    filename: string;
+    size_bytes: number;
+    status: string;
+    gemini_status?: (string | null);
+    anythingllm_status?: (string | null);
+    local_status?: (string | null);
+    error?: (string | null);
+    started_at?: (string | null);
+    finished_at?: (string | null);
 };
 
-export type ItemsPublic = {
-    data: Array<ItemPublic>;
+export type IngestJobCreate = {
+    target: 'gemini' | 'anythingllm' | 'both' | 'local';
+    total: number;
+};
+
+export type target = 'gemini' | 'anythingllm' | 'both' | 'local';
+
+export type IngestJobPublic = {
+    id: string;
+    target: string;
+    total: number;
+    uploaded: number;
+    done: number;
+    failed: number;
+    finished: boolean;
+    eta_seconds?: (number | null);
+    created_at: string;
+    items?: Array<IngestItemPublic>;
+};
+
+export type IngestJobsPublic = {
+    data: Array<IngestJobPublic>;
     count: number;
 };
 
-export type ItemUpdate = {
-    title?: (string | null);
-    description?: (string | null);
+export type IntentCandidatePublic = {
+    category: string;
+    label: string;
+    confidence: number;
+};
+
+export type IntentCategoryPublic = {
+    name: string;
+    label: string;
+};
+
+export type IntentMetric = {
+    intent: string;
+    label: string;
+    total?: number;
+    operator_share?: number;
+};
+
+export type IntentStatusPublic = {
+    enabled: boolean;
+    threshold: number;
+    service_url: string;
+    reachable?: boolean;
+    model_loaded?: boolean;
+    error?: (string | null);
+    categories?: Array<IntentCategoryPublic>;
+};
+
+export type IntentTestPublic = {
+    intent?: (string | null);
+    intent_label?: (string | null);
+    confidence?: number;
+    threshold: number;
+    candidates?: Array<IntentCandidatePublic>;
+    error?: (string | null);
+};
+
+export type IntentTestRequest = {
+    question: string;
 };
 
 export type JournalRequestPublic = {
@@ -102,6 +177,9 @@ export type JournalRequestPublic = {
     status: string;
     confidence: number;
     escalated: boolean;
+    intent?: (string | null);
+    intent_label?: (string | null);
+    intent_confidence?: (number | null);
     created_at?: (string | null);
     answered_at?: (string | null);
     closed_at?: (string | null);
@@ -275,6 +353,24 @@ export type PrivateUserCreate = {
     is_verified?: boolean;
 };
 
+export type RagProviderOption = {
+    name: string;
+    label: string;
+    configured: boolean;
+};
+
+export type RagProviderPublic = {
+    active: string;
+    default: string;
+    options: Array<RagProviderOption>;
+};
+
+export type RagProviderUpdate = {
+    provider: 'legacy' | 'search_only' | 'gemini_file_search' | 'anythingllm';
+};
+
+export type provider = 'legacy' | 'search_only' | 'gemini_file_search' | 'anythingllm';
+
 export type ReindexRequest = {
     source_ids?: (Array<(string)> | null);
     doc_ids?: (Array<(string)> | null);
@@ -301,6 +397,17 @@ export type RolesPublic = {
     count: number;
 };
 
+export type SettingsImport = {
+    yaml: string;
+};
+
+export type SettingsUpdate = {
+    values?: {
+        [key: string]: unknown;
+    };
+    reset?: Array<(string)>;
+};
+
 export type SourceAttribution = {
     source_id: string;
     source_title: string;
@@ -317,9 +424,9 @@ export type SupportAskRequest = {
 };
 
 export type SupportAskResponse = {
-    request_id: string;
+    request_id: (string | null);
     session_id: string;
-    mode: 'faq' | 'rag' | 'operator';
+    mode: 'faq' | 'rag' | 'operator' | 'reject';
     answer: string;
     sources?: Array<SourceAttribution>;
     confidence: number;
@@ -329,7 +436,7 @@ export type SupportAskResponse = {
     decision_metrics: DecisionMetrics;
 };
 
-export type mode = 'faq' | 'rag' | 'operator';
+export type mode = 'faq' | 'rag' | 'operator' | 'reject';
 
 export type SupportFeedbackCreate = {
     request_id: string;
@@ -357,8 +464,11 @@ export type SupportHistoryEntry = {
     fallback_used: boolean;
     status?: string;
     created_at?: (string | null);
+    session_id?: (string | null);
     steps?: Array<SupportHistoryStep>;
 };
+
+export type mode2 = 'faq' | 'rag' | 'operator';
 
 export type SupportHistoryPublic = {
     data: Array<SupportHistoryEntry>;
@@ -388,6 +498,7 @@ export type SupportMetricsPublic = {
     operator_share?: number;
     average_confidence?: number;
     empty_sources_share?: number;
+    by_intent?: Array<IntentMetric>;
     feedback_count?: number;
     average_rating?: number;
 };
@@ -398,6 +509,8 @@ export type SupportTicketPublic = {
     reason: string;
     status: string;
     question: string;
+    intent?: (string | null);
+    intent_label?: (string | null);
     assigned_to?: (string | null);
     resolution?: (string | null);
     reopened_from_id?: (string | null);
@@ -504,6 +617,93 @@ export type ValidationError = {
     };
 };
 
+export type AdminIntentReadIntentStatusResponse = (IntentStatusPublic);
+
+export type AdminIntentTestIntentData = {
+    requestBody: IntentTestRequest;
+};
+
+export type AdminIntentTestIntentResponse = (IntentTestPublic);
+
+export type AdminLogsListLogEventsData = {
+    event?: (string | null);
+    hours?: number;
+    limit?: number;
+    since?: (string | null);
+};
+
+export type AdminLogsListLogEventsResponse = (unknown);
+
+export type AdminLogsGetLogSummaryData = {
+    hours?: number;
+    since?: (string | null);
+};
+
+export type AdminLogsGetLogSummaryResponse = (unknown);
+
+export type AdminLogsDownloadLogFileData = {
+    day: string;
+};
+
+export type AdminLogsDownloadLogFileResponse = (unknown);
+
+export type AdminRagGetRagProviderResponse = (RagProviderPublic);
+
+export type AdminRagSetRagProviderData = {
+    requestBody: RagProviderUpdate;
+};
+
+export type AdminRagSetRagProviderResponse = (RagProviderPublic);
+
+export type AdminRagGetDenseStatusResponse = (unknown);
+
+export type AdminRagListEngineDocumentsData = {
+    engine: 'gemini' | 'anythingllm';
+};
+
+export type AdminRagListEngineDocumentsResponse = (EngineDocumentsPublic);
+
+export type AdminRagCreateIngestJobData = {
+    requestBody: IngestJobCreate;
+};
+
+export type AdminRagCreateIngestJobResponse = (IngestJobPublic);
+
+export type AdminRagListIngestJobsData = {
+    limit?: number;
+};
+
+export type AdminRagListIngestJobsResponse = (IngestJobsPublic);
+
+export type AdminRagUploadIngestFileData = {
+    formData: Body_admin_rag_upload_ingest_file;
+    jobId: string;
+};
+
+export type AdminRagUploadIngestFileResponse = (IngestJobPublic);
+
+export type AdminRagGetIngestJobData = {
+    jobId: string;
+};
+
+export type AdminRagGetIngestJobResponse = (IngestJobPublic);
+
+export type AdminSettingsReadSettingsResponse = (unknown);
+
+export type AdminSettingsUpdateSettingsData = {
+    requestBody: SettingsUpdate;
+};
+
+export type AdminSettingsUpdateSettingsResponse = (unknown);
+
+export type AdminSettingsExportSettingsResponse = (unknown);
+
+export type AdminSettingsImportSettingsData = {
+    requestBody: SettingsImport;
+};
+
+export type AdminSettingsImportSettingsResponse = (unknown);
+
 export type AdminSupportListFaqData = {
     limit?: number;
     skip?: number;
@@ -531,8 +731,11 @@ export type AdminSupportDeleteFaqData = {
 export type AdminSupportDeleteFaqResponse = (Message);
 
 export type AdminSupportListSourcesData = {
+    excludeType?: (string | null);
     limit?: number;
+    search?: (string | null);
     skip?: number;
+    sourceType?: (string | null);
 };
 
 export type AdminSupportListSourcesResponse = (KnowledgeSourcesPublic);
@@ -703,38 +906,6 @@ export type AdminSupportReindexKnowledgeDocsData = {
 
 export type AdminSupportReindexKnowledgeDocsResponse = (ReindexResponse);
 
-export type ItemsReadItemsData = {
-    limit?: number;
-    skip?: number;
-};
-
-export type ItemsReadItemsResponse = (ItemsPublic);
-
-export type ItemsCreateItemData = {
-    requestBody: ItemCreate;
-};
-
-export type ItemsCreateItemResponse = (ItemPublic);
-
-export type ItemsReadItemData = {
-    id: string;
-};
-
-export type ItemsReadItemResponse = (ItemPublic);
-
-export type ItemsUpdateItemData = {
-    id: string;
-    requestBody: ItemUpdate;
-};
-
-export type ItemsUpdateItemResponse = (ItemPublic);
-
-export type ItemsDeleteItemData = {
-    id: string;
-};
-
-export type ItemsDeleteItemResponse = (Message);
-
 export type LoginLoginAccessTokenData = {
     formData: Body_login_login_access_token;
 };
@@ -772,6 +943,12 @@ export type SupportAskSupportQuestionData = {
 };
 
 export type SupportAskSupportQuestionResponse = (SupportAskResponse);
+
+export type SupportEscalateSupportQuestionData = {
+    requestBody: SupportAskRequest;
+};
+
+export type SupportEscalateSupportQuestionResponse = (SupportAskResponse);
 
 export type SupportGetSupportHistoryData = {
     limit?: number;
@@ -851,3 +1028,7 @@ export type UtilsTestEmailData = {
 export type UtilsTestEmailResponse = (Message);
 
 export type UtilsHealthCheckResponse = (boolean);
+
+export type UtilsGetVersionResponse = ({
+    [key: string]: (string | boolean);
+});

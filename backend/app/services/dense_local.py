@@ -28,6 +28,7 @@ from collections.abc import Iterable, Sequence
 from pathlib import Path
 from typing import Any
 
+import httpx
 import numpy as np
 
 from app.core.config import settings
@@ -161,6 +162,54 @@ class BertEncoder:
         return result
 
 
+class RemoteEncoder:
+    """bge-m3 на LM Studio: OpenAI-совместимый /embeddings, без torch и HF.
+
+    Интерфейс совпадает с BertEncoder: ``name``, ``dim``, ``encode(texts, prefix)``.
+    Префиксы bge-m3 не нужны, поэтому аргумент игнорируется.
+    """
+
+    def __init__(self, base_url: str, model: str, timeout: float = 120.0) -> None:
+        self.base_url = base_url.rstrip("/")
+        self.model = model
+        self.timeout = timeout
+        self.name = f"lmstudio-{model}".replace("/", "_")
+        self.dim = int(self.encode(["проба"]).shape[1])
+
+    def encode(self, texts: Sequence[str], prefix: str = "") -> np.ndarray:
+        if not texts:
+            return np.zeros((0, self.dim), dtype=np.float32)
+        rows: list[np.ndarray] = []
+        for start in range(0, len(texts), 32):
+            part = list(texts[start : start + 32])
+            with httpx.Client(timeout=self.timeout) as client:
+                response = client.post(
+                    f"{self.base_url}/embeddings",
+                    json={"model": self.model, "input": part},
+                )
+                response.raise_for_status()
+                data = sorted(
+                    response.json().get("data") or [],
+                    key=lambda item: item.get("index", 0),
+                )
+            rows.extend(
+                np.asarray(item["embedding"], dtype=np.float32) for item in data
+            )
+        matrix = np.vstack(rows) if rows else np.zeros((0, self.dim), dtype=np.float32)
+        norms = np.linalg.norm(matrix, axis=1, keepdims=True)
+        norms[norms == 0] = 1.0
+        return (matrix / norms).astype(np.float32)
+
+
+def remote_settings() -> tuple[str, str] | None:
+    """(адрес, модель) удалённого кодировщика, если он настроен."""
+    base = str(live_settings.LMSTUDIO_BASE_URL or "").strip().rstrip("/")
+    model = str(live_settings.LMSTUDIO_EMBEDDINGS_MODEL or "").strip()
+    if base and model:
+        return base, model
+    return None
+
+
 def _erf(x: np.ndarray) -> np.ndarray:
     """erf для массивов numpy без scipy: аппроксимация erfc Чебышёва
     (Numerical Recipes, «erfcc»), относительная погрешность < 1.2e-7."""
@@ -211,6 +260,8 @@ def model_dir() -> Path:
 
 
 def model_available() -> bool:
+    if remote_settings() is not None:
+        return True
     path = model_dir()
     return (path / "model.safetensors").is_file() and (
         path / "tokenizer.json"
@@ -229,7 +280,11 @@ def get_encoder() -> BertEncoder | None:
         if _encoder is None and _encoder_error is None:
             try:
                 started = time.perf_counter()
-                _encoder = BertEncoder(model_dir(), settings.DENSE_MAX_TOKENS)
+                remote = remote_settings()
+                if remote is not None:
+                    _encoder = RemoteEncoder(*remote)
+                else:
+                    _encoder = BertEncoder(model_dir(), settings.DENSE_MAX_TOKENS)
                 logger.info(
                     "dense model %s loaded in %.1f s",
                     _encoder.name,
@@ -506,7 +561,10 @@ def status() -> dict[str, Any]:
     """Состояние добавки для админки и журнала."""
 
     cache = _cache
+    remote = remote_settings()
     return {
+        "backend": "lmstudio" if remote is not None else "bert",
+        "model": _encoder.name if _encoder is not None else (remote[1] if remote else None),
         "model_dir": str(model_dir()),
         "model_available": model_available(),
         "loaded": _encoder is not None,

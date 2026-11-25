@@ -66,6 +66,8 @@ class SettingSpec:
     db_key: str | None = None
     # Значение по умолчанию для настроек, которых нет в .env (Settings).
     default: Any = None
+    # Пустая строка допустима (например, «эмбеддинги выключены»).
+    allow_empty: bool = False
 
     @property
     def storage_key(self) -> str:
@@ -99,6 +101,12 @@ GROUPS: tuple[GroupSpec, ...] = (
         "@ksup/llm-ollama",
         "LLM встроенного поиска (Ollama)",
         "Пишет текст ответа, когда работает встроенный поиск и нет ключа Google.",
+    ),
+    GroupSpec(
+        "lmstudio",
+        "@ksup/llm-lmstudio",
+        "LLM встроенного поиска (LM Studio)",
+        "OpenAI-совместимый локальный сервер: ответ пишет локальная модель, ключи Google не нужны.",
     ),
     GroupSpec(
         "routing",
@@ -245,6 +253,31 @@ SPECS: tuple[SettingSpec, ...] = (
     SettingSpec(
         "OLLAMA_TIMEOUT_SECONDS",
         "llm",
+        "timeoutSeconds",
+        "Таймаут, с",
+        "int",
+        minimum=1,
+        maximum=600,
+    ),
+    SettingSpec(
+        "LMSTUDIO_BASE_URL",
+        "lmstudio",
+        "baseUrl",
+        "Адрес LM Studio (OpenAI-совместимый)",
+        "url",
+    ),
+    SettingSpec("LMSTUDIO_MODEL", "lmstudio", "model", "Модель"),
+    SettingSpec(
+        "LMSTUDIO_EMBEDDINGS_MODEL",
+        "lmstudio",
+        "embeddingsModel",
+        "Модель эмбеддингов",
+        "Локальный векторный поиск встроенной базы (bge-m3). Пусто — без векторов.",
+        allow_empty=True,
+    ),
+    SettingSpec(
+        "LMSTUDIO_TIMEOUT_SECONDS",
+        "lmstudio",
         "timeoutSeconds",
         "Таймаут, с",
         "int",
@@ -415,6 +448,18 @@ SPECS: tuple[SettingSpec, ...] = (
         "В Docker — http://intent:8000.",
         default="http://intent:8000",
     ),
+    SettingSpec(
+        "INTENT_ENGINE",
+        "intent",
+        "engine",
+        "Движок классификатора",
+        "choice",
+        "kate — старая модель Кати (24 студенческие темы); helpdesk — новая "
+        "модель Кати (TF-IDF по базе Help Desk, 22 темы IT-сервисов ТУСУР). "
+        "Переключатель — во вкладке «Классификатор тем».",
+        choices=("kate", "helpdesk"),
+        default="kate",
+    ),
 )
 
 SPECS_BY_KEY: dict[str, SettingSpec] = {s.key: s for s in SPECS}
@@ -488,6 +533,8 @@ def parse_value(spec: SettingSpec, raw: Any) -> Any:
         return number
     text = str(raw).strip()
     if not text:
+        if spec.allow_empty:
+            return ""
         raise ValueError("пустое значение")
     if len(text) > 500:
         raise ValueError("слишком длинное значение")

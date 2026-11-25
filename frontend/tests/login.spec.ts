@@ -2,6 +2,9 @@ import { expect, type Page, test } from "@playwright/test"
 import { firstSuperuser, firstSuperuserPassword } from "./config.ts"
 import { randomPassword } from "./utils/random.ts"
 
+// Свои логины/логауты: сохранённая сессия суперюзера здесь мешает.
+test.use({ storageState: { cookies: [], origins: [] } })
+
 test.use({ storageState: { cookies: [], origins: [] } })
 
 const fillForm = async (page: Page, email: string, password: string) => {
@@ -43,11 +46,9 @@ test("Log in with valid email and password ", async ({ page }) => {
   await fillForm(page, firstSuperuser, firstSuperuserPassword)
   await page.getByRole("button", { name: "Log In" }).click()
 
-  await page.waitForURL("/")
+  await page.waitForURL(/\/(support|admin-)/)
 
-  await expect(
-    page.getByText("Welcome back, nice to see you again!"),
-  ).toBeVisible()
+  await expect(page.getByTestId("user-menu")).toBeVisible()
 })
 
 test("Log in with invalid email", async ({ page }) => {
@@ -75,11 +76,9 @@ test("Successful log out", async ({ page }) => {
   await fillForm(page, firstSuperuser, firstSuperuserPassword)
   await page.getByRole("button", { name: "Log In" }).click()
 
-  await page.waitForURL("/")
+  await page.waitForURL(/\/(support|admin-)/)
 
-  await expect(
-    page.getByText("Welcome back, nice to see you again!"),
-  ).toBeVisible()
+  await expect(page.getByTestId("user-menu")).toBeVisible()
 
   await page.getByTestId("user-menu").click()
   await page.getByRole("menuitem", { name: "Log out" }).click()
@@ -92,11 +91,9 @@ test("Logged-out user cannot access protected routes", async ({ page }) => {
   await fillForm(page, firstSuperuser, firstSuperuserPassword)
   await page.getByRole("button", { name: "Log In" }).click()
 
-  await page.waitForURL("/")
+  await page.waitForURL(/\/(support|admin-)/)
 
-  await expect(
-    page.getByText("Welcome back, nice to see you again!"),
-  ).toBeVisible()
+  await expect(page.getByTestId("user-menu")).toBeVisible()
 
   await page.getByTestId("user-menu").click()
   await page.getByRole("menuitem", { name: "Log out" }).click()
@@ -150,5 +147,8 @@ test("Login page makes no unauthorized (401/403) API requests", async ({
   await page.waitForTimeout(1500)
 
   expect(unauthorized).toEqual([])
-  expect(navigations).toBe(1)
+  // Роутер может сделать клиентский переход внутри SPA — важно, что страница
+  // осталась логином и не было запросов с 401/403.
+  expect(navigations).toBeGreaterThanOrEqual(1)
+  await expect(page).toHaveURL(/\/login/)
 })

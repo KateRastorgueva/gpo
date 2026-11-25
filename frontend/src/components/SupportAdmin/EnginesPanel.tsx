@@ -29,6 +29,7 @@ import usePermissions from "@/hooks/usePermissions"
 import { PERMISSIONS } from "@/lib/permissions"
 import {
   createIngestJob,
+  deleteEngineDocument,
   getEngineDocuments,
   getIngestJobs,
   getRagProvider,
@@ -380,11 +381,21 @@ export function JobCard({ job }: { job: IngestJob }) {
   )
 }
 
-function EngineDocumentsCard() {
+function EngineDocumentsCard({ canWrite }: { canWrite: boolean }) {
+  const queryClient = useQueryClient()
+  const { showErrorToast, showSuccessToast } = useCustomToast()
   const [engine, setEngine] = useState<RagEngine>("gemini")
   const docsQuery = useQuery({
     queryKey: ["engineDocuments", engine],
     queryFn: () => getEngineDocuments(engine),
+  })
+  const deleteMutation = useMutation({
+    mutationFn: (ref: string) => deleteEngineDocument(engine, ref),
+    onSuccess: () => {
+      showSuccessToast("Документ удалён из движка")
+      queryClient.invalidateQueries({ queryKey: ["engineDocuments", engine] })
+    },
+    onError: (error: Error) => showErrorToast(error.message),
   })
   const docs = docsQuery.data
 
@@ -439,11 +450,12 @@ function EngineDocumentsCard() {
                     <TableHead>Название</TableHead>
                     <TableHead>Состояние</TableHead>
                     <TableHead>Размер</TableHead>
+                    <TableHead>Действия</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {docs.data.map((doc) => (
-                    <TableRow key={doc.name}>
+                    <TableRow key={doc.ref ?? doc.name}>
                       <TableCell className="max-w-[420px] truncate">
                         {doc.name}
                       </TableCell>
@@ -454,6 +466,22 @@ function EngineDocumentsCard() {
                           : doc.word_count != null
                             ? `${doc.word_count.toLocaleString("ru-RU")} слов`
                             : "—"}
+                      </TableCell>
+                      <TableCell>
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          disabled={
+                            !canWrite ||
+                            !doc.ref ||
+                            deleteMutation.isPending
+                          }
+                          onClick={() =>
+                            doc.ref && deleteMutation.mutate(doc.ref)
+                          }
+                        >
+                          Удалить
+                        </Button>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -484,7 +512,7 @@ export function EnginesPanel() {
     <div className="grid gap-4">
       <ProviderCard canWrite={canWrite} />
       {latest ? <JobCard job={latest} /> : null}
-      <EngineDocumentsCard />
+      <EngineDocumentsCard canWrite={canWrite} />
     </div>
   )
 }

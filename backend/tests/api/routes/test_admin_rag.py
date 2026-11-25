@@ -76,6 +76,48 @@ def test_unconfigured_provider_is_rejected(
     assert r.status_code == 400
 
 
+def test_delete_engine_document_calls_provider(
+    client: TestClient, superuser_token_headers: dict[str, str]
+) -> None:
+    with patch.object(rag_providers, "delete_engine_document") as delete_mock:
+        r = client.request(
+            "DELETE",
+            f"{API}/documents",
+            headers=superuser_token_headers,
+            json={"engine": "anythingllm", "ref": "custom-documents/x.json"},
+        )
+
+    assert r.status_code == 200
+    assert r.json()["message"] == "Документ удалён"
+    delete_mock.assert_called_once_with("anythingllm", "custom-documents/x.json")
+
+
+def test_delete_engine_document_requires_admin(
+    client: TestClient, normal_user_token_headers: dict[str, str]
+) -> None:
+    r = client.request(
+        "DELETE",
+        f"{API}/documents",
+        headers=normal_user_token_headers,
+        json={"engine": "anythingllm", "ref": "custom-documents/x.json"},
+    )
+
+    assert r.status_code == 403
+
+
+def test_delete_engine_document_rejects_empty_ref(
+    client: TestClient, superuser_token_headers: dict[str, str]
+) -> None:
+    r = client.request(
+        "DELETE",
+        f"{API}/documents",
+        headers=superuser_token_headers,
+        json={"engine": "anythingllm", "ref": "  "},
+    )
+
+    assert r.status_code == 422
+
+
 def test_ingest_job_processes_files_and_reports_progress(
     client: TestClient, superuser_token_headers: dict[str, str]
 ) -> None:

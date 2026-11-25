@@ -26,6 +26,18 @@ logger = logging.getLogger(__name__)
 # чтобы медленный сервис не тормозил ответы.
 TIMEOUT_SECONDS = 2.0
 
+# Движки: kate — модель Кати (24 студенческие темы), helpdesk — TF-IDF по базе
+# Help Desk (22 темы IT-сервисов ТУСУР). Переключается админом, хранится в
+# app_setting (``cfg:INTENT_ENGINE``).
+ENGINES = ("kate", "helpdesk")
+DEFAULT_ENGINE = "kate"
+# Оба движка — Кати: старый (rubert-tiny2, 24 студенческие темы) и новый
+# (TF-IDF по базе Help Desk, 22 темы IT-сервисов ТУСУР).
+ENGINE_LABELS: dict[str, str] = {
+    "kate": "Катя: старая модель (24 студенческие темы)",
+    "helpdesk": "Катя: новая модель (22 темы сервисов)",
+}
+
 # Копия intent_service/categories.py: нужна для подписей в метриках и очереди,
 # даже когда сервис выключен.
 CATEGORY_LABELS: dict[str, str] = {
@@ -67,23 +79,42 @@ class IntentConfig:
     enabled: bool
     threshold: float
     service_url: str
+    engine: str = DEFAULT_ENGINE
 
 
 @dataclass
 class IntentResult:
     intent: str | None
     confidence: float
+    label: str | None = None
+    engine: str | None = None
     candidates: list[dict[str, Any]] = field(default_factory=list)
     error: str | None = None
 
 
 def get_config() -> IntentConfig:
     threshold = float(live_settings.INTENT_CLASSIFIER_THRESHOLD)
+    engine = str(live_settings.INTENT_ENGINE or DEFAULT_ENGINE).strip().lower()
+    if engine not in ENGINES:
+        engine = DEFAULT_ENGINE
     return IntentConfig(
         enabled=bool(live_settings.INTENT_CLASSIFIER_ENABLED),
         threshold=min(1.0, max(0.0, threshold)),
         service_url=str(live_settings.INTENT_CLASSIFIER_URL).strip().rstrip("/"),
+        engine=engine,
     )
+
+
+def read_health(config: IntentConfig) -> dict[str, Any] | None:
+    """Тело ответа /health сервиса (или None, если сервис не ответил)."""
+    try:
+        with httpx.Client(timeout=TIMEOUT_SECONDS) as client:
+            response = client.get(f"{config.service_url}/health")
+            response.raise_for_status()
+            body = response.json()
+    except Exception:  # noqa: BLE001 - причина покажется через check_health
+        return None
+    return body if isinstance(body, dict) else None
 
 
 def check_health(config: IntentConfig) -> tuple[bool, bool, str | None]:
@@ -104,20 +135,35 @@ def classify(question: str, config: IntentConfig) -> IntentResult:
     try:
         with httpx.Client(timeout=TIMEOUT_SECONDS) as client:
             response = client.post(
-                f"{config.service_url}/classify", json={"text": question, "top_k": 3}
+                f"{config.service_url}/classify",
+                json={"text": question, "top_k": 3, "engine": config.engine},
             )
             response.raise_for_status()
             body = response.json()
         intent = str(body["category"])
         confidence = min(1.0, max(0.0, float(body["confidence"])))
         candidates = list(body.get("candidates") or [])
+        label = str(body.get("label") or "") or None
+        engine = str(body.get("engine") or config.engine)
     except Exception as exc:  # noqa: BLE001 - классификатор не должен ронять ответ
         return IntentResult(
             intent=None, confidence=0.0, error=f"{type(exc).__name__}: {exc}"
         )
     if confidence < config.threshold:
-        return IntentResult(intent=None, confidence=confidence, candidates=candidates)
-    return IntentResult(intent=intent, confidence=confidence, candidates=candidates)
+        return IntentResult(
+            intent=None,
+            confidence=confidence,
+            label=label,
+            engine=engine,
+            candidates=candidates,
+        )
+    return IntentResult(
+        intent=intent,
+        confidence=confidence,
+        label=label,
+        engine=engine,
+        candidates=candidates,
+    )
 
 
 def classify_for_request(question: str) -> tuple[str | None, float | None]:
