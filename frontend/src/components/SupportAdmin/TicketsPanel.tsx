@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import { Link } from "@tanstack/react-router"
 import { useState } from "react"
 
 import { UsersService } from "@/client"
@@ -147,13 +148,20 @@ function ThreadMessages({ thread }: { thread: SupportHistoryEntry }) {
   )
 }
 
-export function TicketsPanel() {
+export function TicketsPanel({
+  initialTicketId,
+}: {
+  /** Тикет из адреса (/ticket/<id>): переписка открыта сразу. */
+  initialTicketId?: string
+} = {}) {
   const { showErrorToast, showSuccessToast } = useCustomToast()
   const { has } = usePermissions()
   // Без ticket:resolve тикеты доступны только на чтение
   const canResolve = has(PERMISSIONS.TICKET_RESOLVE)
   const queryClient = useQueryClient()
-  const [openThread, setOpenThread] = useState<string | null>(null)
+  const [openThread, setOpenThread] = useState<string | null>(
+    initialTicketId ?? null,
+  )
   const [reopenTarget, setReopenTarget] = useState<SupportTicket | null>(null)
   const [reopenReason, setReopenReason] = useState("")
 
@@ -283,6 +291,19 @@ export function TicketsPanel() {
                   </span>
                 ) : null}
               </div>
+
+              {expanded ? (
+                <p className="text-xs text-muted-foreground">
+                  Ссылка на переписку:{" "}
+                  <Link
+                    to="/ticket/$ticketId"
+                    params={{ ticketId: ticket.ticket_id }}
+                    className="text-primary underline"
+                  >
+                    /ticket/{ticket.ticket_id}
+                  </Link>
+                </p>
+              ) : null}
 
               {expanded ? (
                 <TicketThread

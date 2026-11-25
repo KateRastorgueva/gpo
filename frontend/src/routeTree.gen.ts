@@ -24,6 +24,8 @@ import { Route as LayoutAdminRequestsRouteImport } from './routes/_layout/admin-
 import { Route as LayoutAdminMetricsRouteImport } from './routes/_layout/admin-metrics'
 import { Route as LayoutAdminKnowledgeRouteImport } from './routes/_layout/admin-knowledge'
 import { Route as LayoutAdminRouteImport } from './routes/_layout/admin'
+import { Route as LayoutTicketTicketIdRouteImport } from './routes/_layout/ticket.$ticketId'
+import { Route as LayoutChatChatIdRouteImport } from './routes/_layout/chat.$chatId'
 
 const SignupRoute = SignupRouteImport.update({
   id: '/signup',
@@ -99,6 +101,16 @@ const LayoutAdminRoute = LayoutAdminRouteImport.update({
   path: '/admin',
   getParentRoute: () => LayoutRoute,
 } as any)
+const LayoutTicketTicketIdRoute = LayoutTicketTicketIdRouteImport.update({
+  id: '/ticket/$ticketId',
+  path: '/ticket/$ticketId',
+  getParentRoute: () => LayoutRoute,
+} as any)
+const LayoutChatChatIdRoute = LayoutChatChatIdRouteImport.update({
+  id: '/chat/$chatId',
+  path: '/chat/$chatId',
+  getParentRoute: () => LayoutRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof LayoutIndexRoute
@@ -115,6 +127,8 @@ export interface FileRoutesByFullPath {
   '/my-requests': typeof LayoutMyRequestsRoute
   '/settings': typeof LayoutSettingsRoute
   '/support': typeof LayoutSupportRoute
+  '/chat/$chatId': typeof LayoutChatChatIdRoute
+  '/ticket/$ticketId': typeof LayoutTicketTicketIdRoute
 }
 export interface FileRoutesByTo {
   '/login': typeof LoginRoute
@@ -131,6 +145,8 @@ export interface FileRoutesByTo {
   '/settings': typeof LayoutSettingsRoute
   '/support': typeof LayoutSupportRoute
   '/': typeof LayoutIndexRoute
+  '/chat/$chatId': typeof LayoutChatChatIdRoute
+  '/ticket/$ticketId': typeof LayoutTicketTicketIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -149,6 +165,8 @@ export interface FileRoutesById {
   '/_layout/settings': typeof LayoutSettingsRoute
   '/_layout/support': typeof LayoutSupportRoute
   '/_layout/': typeof LayoutIndexRoute
+  '/_layout/chat/$chatId': typeof LayoutChatChatIdRoute
+  '/_layout/ticket/$ticketId': typeof LayoutTicketTicketIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -167,6 +185,8 @@ export interface FileRouteTypes {
     | '/my-requests'
     | '/settings'
     | '/support'
+    | '/chat/$chatId'
+    | '/ticket/$ticketId'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/login'
@@ -183,6 +203,8 @@ export interface FileRouteTypes {
     | '/settings'
     | '/support'
     | '/'
+    | '/chat/$chatId'
+    | '/ticket/$ticketId'
   id:
     | '__root__'
     | '/_layout'
@@ -200,6 +222,8 @@ export interface FileRouteTypes {
     | '/_layout/settings'
     | '/_layout/support'
     | '/_layout/'
+    | '/_layout/chat/$chatId'
+    | '/_layout/ticket/$ticketId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -317,6 +341,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LayoutAdminRouteImport
       parentRoute: typeof LayoutRoute
     }
+    '/_layout/ticket/$ticketId': {
+      id: '/_layout/ticket/$ticketId'
+      path: '/ticket/$ticketId'
+      fullPath: '/ticket/$ticketId'
+      preLoaderRoute: typeof LayoutTicketTicketIdRouteImport
+      parentRoute: typeof LayoutRoute
+    }
+    '/_layout/chat/$chatId': {
+      id: '/_layout/chat/$chatId'
+      path: '/chat/$chatId'
+      fullPath: '/chat/$chatId'
+      preLoaderRoute: typeof LayoutChatChatIdRouteImport
+      parentRoute: typeof LayoutRoute
+    }
   }
 }
 
@@ -331,6 +369,8 @@ interface LayoutRouteChildren {
   LayoutSettingsRoute: typeof LayoutSettingsRoute
   LayoutSupportRoute: typeof LayoutSupportRoute
   LayoutIndexRoute: typeof LayoutIndexRoute
+  LayoutChatChatIdRoute: typeof LayoutChatChatIdRoute
+  LayoutTicketTicketIdRoute: typeof LayoutTicketTicketIdRoute
 }
 
 const LayoutRouteChildren: LayoutRouteChildren = {
@@ -344,6 +384,8 @@ const LayoutRouteChildren: LayoutRouteChildren = {
   LayoutSettingsRoute: LayoutSettingsRoute,
   LayoutSupportRoute: LayoutSupportRoute,
   LayoutIndexRoute: LayoutIndexRoute,
+  LayoutChatChatIdRoute: LayoutChatChatIdRoute,
+  LayoutTicketTicketIdRoute: LayoutTicketTicketIdRoute,
 }
 
 const LayoutRouteWithChildren =
