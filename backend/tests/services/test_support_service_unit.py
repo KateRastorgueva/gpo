@@ -14,11 +14,12 @@ def _result(
     chunk_id: uuid.UUID | None = None,
     snippet: str = "Student support portal answers requests.",
     score: float = 0.8,
+    source_ref: str = "https://example.edu/support",
 ) -> RetrievalResult:
     return RetrievalResult(
         source_id=source_id or uuid.uuid4(),
         source_title="Support source",
-        source_ref="https://example.edu/support",
+        source_ref=source_ref,
         chunk_id=chunk_id or uuid.uuid4(),
         snippet=snippet,
         score=score,
@@ -210,3 +211,30 @@ def test_generate_answer_prefers_lmstudio_over_ollama() -> None:
     assert fallback_used is True
     lmstudio_mock.assert_called_once()
     ollama_mock.assert_not_called()
+
+def test_sanitize_answer_links_keeps_only_source_links() -> None:
+    """В ответе остаются только ссылки из найденных источников."""
+    allowed = "https://help.tusur.ru/knowledgebase.php?article=135"
+    results = [
+        _result(snippet="Инструкция по справке.", score=0.9, source_ref=allowed)
+    ]
+    text = (
+        "Смотри [инструкцию](https://help.tusur.ru/knowledgebase.php?article=135) "
+        "и ещё [сайт](http://evil.example/fake)."
+    )
+
+    cleaned = service.sanitize_answer_links(text, results)
+
+    assert f"[инструкцию]({allowed})" in cleaned
+    assert "evil.example" not in cleaned
+    assert "сайт" in cleaned
+
+
+def test_sanitize_answer_links_removes_links_without_sources() -> None:
+    results = [_result(snippet="Файл устава.", score=0.9, source_ref="Ustav_2018.pdf")]
+
+    cleaned = service.sanitize_answer_links(
+        "Подробнее: https://example.org/x и [тут](https://example.org/y).", results
+    )
+
+    assert "example.org" not in cleaned

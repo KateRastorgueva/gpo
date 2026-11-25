@@ -33,19 +33,54 @@ const formatTime = (value?: string) =>
       })
     : null
 
-// Модели отвечают в markdown. Полноценный парсер не нужен: хватает жирного
-// текста, заголовков и списков; HTML не вставляем, только React-узлы.
-const inline = (text: string): ReactNode[] =>
-  text
-    .split(/(\*\*[^*]+\*\*)/g)
-    .filter(Boolean)
-    .map((part, index) =>
-      part.startsWith("**") && part.endsWith("**") ? (
-        <strong key={index}>{part.slice(2, -2)}</strong>
-      ) : (
-        part.replace(/`/g, "")
-      ),
-    )
+// Жирный текст, markdown-ссылки [текст](url) и голые http(s)-адреса.
+// HTML не вставляем, только React-узлы.
+const INLINE_PATTERN =
+  /(\*\*[^*]+\*\*)|\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)|(https?:\/\/[^\s<]+)/g
+
+const inline = (text: string): ReactNode[] => {
+  const nodes: ReactNode[] = []
+  let last = 0
+  let key = 0
+  for (const match of text.matchAll(INLINE_PATTERN)) {
+    const start = match.index ?? 0
+    if (start > last) {
+      nodes.push(text.slice(last, start).replace(/`/g, ""))
+    }
+    if (match[1]) {
+      nodes.push(<strong key={key++}>{match[1].slice(2, -2)}</strong>)
+    } else if (match[3]) {
+      nodes.push(
+        <a
+          key={key++}
+          className="break-all text-primary underline"
+          href={match[3]}
+          target="_blank"
+          rel="noreferrer"
+        >
+          {match[2]}
+        </a>,
+      )
+    } else if (match[4]) {
+      nodes.push(
+        <a
+          key={key++}
+          className="break-all text-primary underline"
+          href={match[4]}
+          target="_blank"
+          rel="noreferrer"
+        >
+          {match[4]}
+        </a>,
+      )
+    }
+    last = start + match[0].length
+  }
+  if (last < text.length) {
+    nodes.push(text.slice(last).replace(/`/g, ""))
+  }
+  return nodes
+}
 
 function RichText({ text }: { text: string }) {
   const blocks: ReactNode[] = []

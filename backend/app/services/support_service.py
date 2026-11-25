@@ -1553,7 +1553,10 @@ def _build_prompt(question: str, results: list[RetrievalResult]) -> str:
     return (
         "Ты ассистент техподдержки университета. Отвечай только на основе контекста.\n"
         "Если контекста недостаточно, скажи, что ответа нет.\n"
-        "Ответ должен быть кратким и практичным.\n\n"
+        "Ответ должен быть кратким и практичным.\n"
+        "Если у источника есть http-ссылка, укажи её прямо в тексте ответа "
+        "markdown-ссылкой: [короткое название](ссылка). Ссылки бери только из "
+        "контекста, не придумывай.\n\n"
         f"Вопрос пользователя:\n{question}\n\n"
         f"Подтверждающий контекст:\n{context_block}\n\n"
         "Сформируй ответ на русском языке."
@@ -1738,6 +1741,48 @@ def _generate_with_lmstudio(prompt: str) -> str:
     if not text:
         raise RuntimeError("LM Studio returned empty text")
     return text
+
+
+# Markdown-ссылка; закрывающая скобка необязательна — модель иногда обрывает.
+_MD_LINK_RE = re.compile(r"\[([^\]]+)\]\((https?://[^\s)]*)\)?")
+# Голый адрес, но не внутри markdown-ссылки (после "](").
+_BARE_URL_RE = re.compile(r"(?<!\]\()https?://[^\s<)]+")
+
+
+def _allowed_urls(results: list[RetrievalResult]) -> set[str]:
+    allowed: set[str] = set()
+    for result in results:
+        ref = (result.source_ref or "").strip()
+        if ref.startswith(("http://", "https://")):
+            allowed.add(ref.rstrip(".,;)"))
+    return allowed
+
+
+def sanitize_answer_links(answer: str, results: list[RetrievalResult]) -> str:
+    """Оставляет только ссылки из найденных источников и чинит оборванные.
+
+    Модель иногда придумывает URL: такой адрес вырезается, а текст ссылки
+    остаётся обычным словом.
+    """
+
+    allowed = _allowed_urls(results)
+
+    def _link(match: re.Match[str]) -> str:
+        text, url = match.group(1), match.group(2).rstrip(".,;)")
+        if url in allowed:
+            return f"[{text}]({url})"
+        return text
+
+    cleaned = _MD_LINK_RE.sub(_link, answer)
+    # Оборванные «[текст](» без адреса — оставляем только текст.
+    cleaned = re.sub(r"\[([^\]]*)\]\(\s*(?=[\s.,;!?]|$)", r"\1", cleaned)
+
+    def _bare(match: re.Match[str]) -> str:
+        url = match.group(0).rstrip(".,;)")
+        return match.group(0) if url in allowed else ""
+
+    cleaned = _BARE_URL_RE.sub(_bare, cleaned)
+    return re.sub(r"[ \t]{2,}", " ", cleaned)
 
 
 def generate_answer(question: str, results: list[RetrievalResult]) -> tuple[str, bool]:
@@ -2339,6 +2384,7 @@ def run_support_pipeline(
 
     try:
         answer_text, fallback_used = generate_answer(payload.question, retrieved)
+        answer_text = sanitize_answer_links(answer_text, retrieved)
     except Exception as exc:
         event_log.log_event(
             "rag.llm_error", provider="legacy", error=f"{type(exc).__name__}: {exc}"
