@@ -36,7 +36,7 @@ test("chats are not shared between users on the same browser", async ({
     await page.fill('input[type="email"]', firstSuperuser)
     await page.fill('input[type="password"]', firstSuperuserPassword)
     await page.click('button[type="submit"]')
-    await page.waitForURL(/admin-support/)
+    await page.waitForURL(/admin-/)
     await page.goto("/support")
     await expect(page.getByLabel("Удалить чат").first()).toBeVisible({
       timeout: 30000,

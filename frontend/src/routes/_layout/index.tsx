@@ -1,7 +1,7 @@
 import { createFileRoute, redirect } from "@tanstack/react-router"
 
 import { UsersService } from "@/client"
-import { canOpenSupportAdmin } from "@/lib/permissions"
+import { sectionPath, sectionsFor } from "@/components/SupportAdmin/sections"
 
 export const Route = createFileRoute("/_layout/")({
   // Отдельной «Главной» нет: после входа каждый попадает в свой основной раздел —
@@ -13,9 +13,8 @@ export const Route = createFileRoute("/_layout/")({
     } catch {
       user = null
     }
-    throw redirect({
-      to: canOpenSupportAdmin(user) ? "/admin-support" : "/support",
-    })
+    const [section] = sectionsFor(user)
+    throw redirect({ to: section ? sectionPath(section) : "/support" })
   },
   component: () => null,
   head: () => ({

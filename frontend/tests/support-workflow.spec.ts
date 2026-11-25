@@ -54,8 +54,9 @@ test("admin grants a role in the panel and the user gets access", async ({
   const password = randomPassword()
 
   await logInUser(page, firstSuperuser, firstSuperuserPassword)
-  await page.goto("/admin")
-  await expect(page.getByRole("heading", { name: "Users" })).toBeVisible()
+  await page.goto("/admin-system")
+  await page.getByRole("tab", { name: "Пользователи" }).click()
+  await expect(page.getByRole("button", { name: "Add User" })).toBeVisible()
 
   // Создание пользователя с ролью оператора через форму
   await page.getByRole("button", { name: "Add User" }).click()
@@ -89,18 +90,19 @@ test("admin grants a role in the panel and the user gets access", async ({
   await page.getByTestId("email-input").fill(email)
   await page.getByTestId("password-input").fill(password)
   await page.getByRole("button", { name: "Log In" }).click()
-  await page.waitForURL("/")
-  await expect(
-    page.getByRole("link", { name: "Admin", exact: true }),
-  ).toBeVisible()
-  await expect(page.getByRole("link", { name: "Support Admin" })).toBeVisible()
+  await page.waitForURL(/\/(support|admin-)/)
+  await expect(page.getByRole("link", { name: "Обращения" })).toBeVisible()
+  await expect(page.getByRole("link", { name: "Метрики" })).toBeVisible()
 })
 
 test("operator answers an escalated question and the user sees the answer", async ({
   browser,
   request,
 }) => {
-  const question = `Сколько стоит проживание в общежитии? кейс ${Date.now()}`
+  // Вопрос, который сейчас гарантированно уходит оператору: документ о сроках
+  // рассмотрения обращений — скан без текстового слоя, в базе знаний его нет.
+  // Заведомо вне базы знаний: такой вопрос гарантированно уходит оператору.
+  const question = `Посоветуйте рецепт борща, кейс ${Date.now()}`
   const answer = `Ответ оператора: стоимость проживания уточняется в деканате. ${Date.now()}`
 
   // Пользователь задаёт вопрос, который уходит оператору
@@ -113,7 +115,9 @@ test("operator answers an escalated question and the user sees the answer", asyn
   await userPage.goto("/support")
   await userPage.getByPlaceholder(/Опишите ваш вопрос/).fill(question)
   await userPage.getByRole("button", { name: "Отправить" }).click()
-  await expect(userPage.getByText("Вопрос передан оператору")).toBeVisible({
+  await expect(
+    userPage.getByText(/Автоматический ответ недоступен/),
+  ).toBeVisible({
     timeout: 60_000,
   })
 
@@ -122,8 +126,7 @@ test("operator answers an escalated question and the user sees the answer", asyn
   const operatorContext = await browser.newContext()
   const operatorPage = await operatorContext.newPage()
   await logInUser(operatorPage, operator.email, operator.password)
-  await operatorPage.goto("/admin-support")
-  await operatorPage.getByRole("tab", { name: "Обращения" }).click()
+  await operatorPage.goto("/admin-requests")
   await operatorPage.getByRole("tab", { name: "Тикеты" }).click()
 
   const card = operatorPage
@@ -146,6 +149,8 @@ test("operator answers an escalated question and the user sees the answer", asyn
   await expect(userPage.getByText(answer).first()).toBeVisible({
     timeout: 15_000,
   })
+  // Форма оценки спрятана в свёрнутый блок «Оценить ответ».
+  await userPage.getByText("Оценить ответ").first().click()
   await expect(userPage.getByText("Оцените ответ").first()).toBeVisible()
 
   await userContext.close()

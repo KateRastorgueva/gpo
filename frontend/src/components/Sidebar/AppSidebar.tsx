@@ -1,7 +1,4 @@
-import {
-  Headset,
-  Settings2,
-} from "lucide-react"
+import { Headset } from "lucide-react"
 
 import { SidebarAppearance } from "@/components/Common/Appearance"
 import { Logo } from "@/components/Common/Logo"
@@ -11,6 +8,7 @@ import {
   SidebarFooter,
   SidebarHeader,
 } from "@/components/ui/sidebar"
+import { sectionPath, sectionsFor } from "@/components/SupportAdmin/sections"
 import usePermissions from "@/hooks/usePermissions"
 import { type Item, Main } from "./Main"
 import { User } from "./User"
@@ -20,24 +18,20 @@ const baseItems: Item[] = [
 ]
 
 export function AppSidebar() {
-  const {
-    user: currentUser,
-    canOpenSupportAdmin,
-  } = usePermissions()
+  const { user: currentUser } = usePermissions()
 
-  // Разделы появляются по правам роли: оператор видит работу с обращениями,
-  // но не управление пользователями, обычный пользователь — только базовые разделы.
+  // Разделы появляются по правам роли: оператор видит «Обращения», но не
+  // управление пользователями, обычный пользователь — только базовые разделы.
   const items: Item[] = [
     ...baseItems,
-    ...(canOpenSupportAdmin
-      ? [
-          {
-            icon: Settings2,
-            title: "Управление",
-            path: "/admin-support",
-          } satisfies Item,
-        ]
-      : []),
+    ...sectionsFor(currentUser).map(
+      (section) =>
+        ({
+          icon: section.icon,
+          title: section.label,
+          path: sectionPath(section),
+        }) satisfies Item,
+    ),
   ]
 
   return (

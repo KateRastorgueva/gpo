@@ -2,8 +2,8 @@ import { expect, test } from "@playwright/test"
 
 /** Переключатель движка классификатора в админке: helpdesk ↔ kate. */
 test("intent engine switch works in the admin panel", async ({ page }) => {
-  await page.goto("/admin-support")
-  await page.getByRole("tab", { name: "Система" }).click()
+  await page.goto("/admin-system")
+
 
   const intentTab = page.getByRole("tab", { name: "Классификатор тем" })
   await expect(intentTab).toBeVisible({ timeout: 15000 })

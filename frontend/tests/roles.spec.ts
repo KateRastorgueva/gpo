@@ -55,45 +55,37 @@ async function createUserWithRole(
   return { email, password }
 }
 
-test("operator sees support admin without knowledge editing", async ({
+test("operator sees admin sections without knowledge editing", async ({
   page,
   request,
 }) => {
   const { email, password } = await createUserWithRole(request, "operator")
   await logInUser(page, email, password)
 
-  // Раздел поддержки доступен, управление пользователями — нет
-  await expect(page.getByRole("link", { name: "Support Admin" })).toBeVisible()
-  await expect(
-    page.getByRole("link", { name: "Admin", exact: true }),
-  ).toHaveCount(0)
-
-  await page.goto("/admin-support")
-  await expect(
-    page.getByRole("heading", { name: "Администрирование поддержки" }),
-  ).toBeVisible()
-  await expect(page.getByText(/Роль: operator/)).toBeVisible()
-
-  // Вкладки по правам: метрики, обращения и знания на чтение
-  for (const tab of ["Метрики", "Обращения", "Знания"]) {
-    await expect(page.getByRole("tab", { name: tab })).toBeVisible()
+  // Разделы в левом меню: знания, обращения, метрики
+  for (const section of ["Знания", "Обращения", "Метрики"]) {
+    await expect(page.getByRole("link", { name: section })).toBeVisible()
   }
 
-  // Знания доступны на чтение: формы создания источника нет, «Удалить» нет
-  await page.getByRole("tab", { name: "Знания" }).click()
+  // Знания доступны на чтение: формы создания источника и «Удалить» нет
+  await page.goto("/admin-knowledge")
+  await expect(
+    page.getByRole("heading", { name: "Знания", exact: true }),
+  ).toBeVisible()
+  await expect(page.getByText(/Роль: operator/)).toBeVisible()
   await page.getByRole("tab", { name: "Источники" }).click()
   await expect(page.getByText("Источники знаний")).toBeVisible()
   await expect(page.getByText("Новый источник знаний")).toHaveCount(0)
   await expect(page.getByRole("button", { name: "Удалить" })).toHaveCount(0)
 
   // Тикеты оператор может решать: предупреждение об отсутствии прав не показывается
-  await page.getByRole("tab", { name: "Обращения" }).click()
+  await page.goto("/admin-requests")
   await page.getByRole("tab", { name: "Тикеты" }).click()
   await expect(page.getByText(/Действия недоступны/)).toHaveCount(0)
 
-  // Управление пользователями закрыто
-  await page.goto("/admin")
-  await expect(page).toHaveURL("/")
+  // Управление пользователями закрыто (вкладки нет)
+  await page.goto("/admin-system")
+  await expect(page.getByRole("tab", { name: "Пользователи" })).toHaveCount(0)
 })
 
 test("regular user has only base sections", async ({ page }) => {
@@ -102,21 +94,18 @@ test("regular user has only base sections", async ({ page }) => {
   await signUpNewUser(page, "Regular User", email, password)
   await logInUser(page, email, password)
 
-  await expect(page.getByRole("link", { name: "Support" })).toBeVisible()
-  await expect(page.getByRole("link", { name: "Support Admin" })).toHaveCount(0)
-  await expect(
-    page.getByRole("link", { name: "Admin", exact: true }),
-  ).toHaveCount(0)
+  await expect(page.getByRole("link", { name: "Чат" })).toBeVisible()
+  for (const section of ["Знания", "Обращения", "Метрики", "Система"]) {
+    await expect(page.getByRole("link", { name: section })).toHaveCount(0)
+  }
 
-  await page.goto("/admin-support")
-  await expect(page).toHaveURL("/")
-
-  await page.goto("/admin")
-  await expect(page).toHaveURL("/")
+  // Админ-разделы закрыты: уводит в чат
+  await page.goto("/admin-knowledge")
+  await expect(page).toHaveURL(/\/support/)
+  await page.goto("/admin-system")
+  await expect(page).toHaveURL(/\/support/)
 
   // Пользовательский раздел поддержки остаётся доступным
   await page.goto("/support")
-  await expect(
-    page.getByRole("heading", { name: "Техподдержка университета" }),
-  ).toBeVisible()
+  await expect(page.getByRole("heading", { name: "Техподдержка" })).toBeVisible()
 })

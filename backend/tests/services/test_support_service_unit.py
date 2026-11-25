@@ -238,3 +238,21 @@ def test_sanitize_answer_links_removes_links_without_sources() -> None:
     )
 
     assert "example.org" not in cleaned
+
+def test_ensure_answer_links_appends_source_link() -> None:
+    """Если модель не вставила ссылку, в конце ответа появляется «Подробнее»."""
+    url = "https://help.tusur.ru/knowledgebase.php?article=135"
+    results = [_result(snippet="Инструкция.", score=0.9, source_ref=url)]
+
+    linked = service.ensure_answer_links("Готовый ответ без ссылок.", results)
+
+    assert "Подробнее" in linked
+    assert f"[Support source]({url})" in linked
+
+
+def test_ensure_answer_links_keeps_existing_link() -> None:
+    url = "https://help.tusur.ru/knowledgebase.php?article=135"
+    results = [_result(snippet="Инструкция.", score=0.9, source_ref=url)]
+    answer = f"Смотри [инструкцию]({url})."
+
+    assert service.ensure_answer_links(answer, results) == answer

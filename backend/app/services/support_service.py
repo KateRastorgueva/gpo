@@ -1785,6 +1785,28 @@ def sanitize_answer_links(answer: str, results: list[RetrievalResult]) -> str:
     return re.sub(r"[ \t]{2,}", " ", cleaned)
 
 
+def ensure_answer_links(answer: str, results: list[RetrievalResult]) -> str:
+    """Добавляет ссылку на источник, если модель не вставила её сама.
+
+    Модель не обязана ссылаться; пользователь должен получить ссылку в любом
+    случае, поэтому в конец ответа добавляется строка «Подробнее: …».
+    """
+
+    allowed = _allowed_urls(results)
+    if not allowed or "](http" in answer:
+        return answer
+    links: list[str] = []
+    for result in results:
+        ref = (result.source_ref or "").strip().rstrip(".,;)")
+        if ref in allowed:
+            links.append(f"[{result.source_title}]({ref})")
+        if len(links) == 2:
+            break
+    if not links:
+        return answer
+    return f"{answer.rstrip()}\n\nПодробнее: {' · '.join(links)}"
+
+
 def generate_answer(question: str, results: list[RetrievalResult]) -> tuple[str, bool]:
     """Генерирует RAG-ответ и возвращает признак использования fallback."""
 
@@ -2384,7 +2406,9 @@ def run_support_pipeline(
 
     try:
         answer_text, fallback_used = generate_answer(payload.question, retrieved)
-        answer_text = sanitize_answer_links(answer_text, retrieved)
+        answer_text = ensure_answer_links(
+            sanitize_answer_links(answer_text, retrieved), retrieved
+        )
     except Exception as exc:
         event_log.log_event(
             "rag.llm_error", provider="legacy", error=f"{type(exc).__name__}: {exc}"
