@@ -27,7 +27,7 @@ dependencies = [
     # Локальная векторная добавка к BM25 (rubert-mini-frida): numpy-реализация BERT
     # без torch. Вместе ~25 МБ, модель (~125 МБ) монтируется отдельно.
     "numpy>=1.26,<3.0",
-    "tokenizers>=0.19,<1.0",
+    "tokenizers>=0.23.3,<1.0",
     "safetensors>=0.4,<1.0",
 ]
 
