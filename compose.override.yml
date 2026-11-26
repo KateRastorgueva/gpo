@@ -160,7 +160,7 @@ services:
   # Локальный RAG-движок (RAG_PROVIDER=anythingllm / переключатель в админке).
   # Не стартует по умолчанию: docker compose --profile anythingllm up -d anythingllm
   anythingllm:
-    image: mintplexlabs/anythingllm:1.17.0
+    image: mintplexlabs/anythingllm:1.20.0
     profiles: ["anythingllm"]
     cap_add:
       - SYS_ADMIN
