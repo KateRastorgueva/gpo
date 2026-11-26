@@ -24,7 +24,7 @@ services:
   #   docker compose --profile qdrant up -d  и  VECTOR_SEARCH_ENABLED=true
   qdrant:
     profiles: ["qdrant"]
-    image: qdrant/qdrant:v1.14.1
+    image: qdrant/qdrant:v1.20.2
     restart: always
     volumes:
       - qdrant-data:/qdrant/storage
